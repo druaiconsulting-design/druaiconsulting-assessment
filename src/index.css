@@ -1,0 +1,343 @@
+/* =============================================================
+   DRU CLEAR™ PWA — Design System | Build: 2026-04-04-v3
+   Philosophy: Executive Prestige — Dark Luxury
+   Background: Deep Sea Blue (#0A2342)
+   Primary accent: Gold (#D4AF37)
+   CTA accent: Magenta (#C2185B)
+   Headings: Playfair Display | Body: Inter
+   ============================================================= */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --radius: 0.5rem;
+
+  /* DRU CLEAR Brand Colors */
+  --deep-sea-blue: #0A2342;
+  --gold: #D4AF37;
+  --gold-light: #E8C84A;
+  --gold-dark: #B8960C;
+  --magenta: #C2185B;
+  --magenta-hover: #AD1457;
+  --soft-white: #E6E6E6;
+  --pure-white: #FFFFFF;
+
+  /* Theme tokens — dark by default */
+  --background: oklch(0.12 0.04 240);
+  --foreground: oklch(0.92 0.005 65);
+  --card: oklch(0.16 0.04 240);
+  --card-foreground: oklch(0.92 0.005 65);
+  --popover: oklch(0.16 0.04 240);
+  --popover-foreground: oklch(0.92 0.005 65);
+  --primary: oklch(0.78 0.12 85);
+  --primary-foreground: oklch(0.12 0.04 240);
+  --secondary: oklch(0.20 0.04 240);
+  --secondary-foreground: oklch(0.85 0.005 65);
+  --muted: oklch(0.20 0.04 240);
+  --muted-foreground: oklch(0.65 0.01 65);
+  --accent: oklch(0.20 0.04 240);
+  --accent-foreground: oklch(0.92 0.005 65);
+  --destructive: oklch(0.62 0.22 15);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.78 0.12 85);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    height: 100%;
+    overflow: auto;
+    /* Disable pull-to-refresh and overscroll bounce on all pages */
+    overscroll-behavior: none;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    background-color: #0A2342;
+    color: #E6E6E6;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    height: 100%;
+    overflow: auto;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Playfair Display', serif;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    max-width: 480px;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* Gold gradient text */
+  .text-gold-gradient {
+    background: linear-gradient(135deg, #D4AF37 0%, #E8C84A 50%, #B8960C 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Screen transitions */
+  .screen-enter {
+    animation: screenFadeIn 0.4s ease forwards;
+  }
+
+  @keyframes screenFadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Score button */
+  .score-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(212, 175, 55, 0.4);
+    background: transparent;
+    color: #E6E6E6;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .score-btn:hover {
+    border-color: #D4AF37;
+    color: #D4AF37;
+    background: rgba(212, 175, 55, 0.08);
+  }
+
+  .score-btn.selected {
+    background: #D4AF37;
+    border-color: #D4AF37;
+    color: #0A2342;
+    font-weight: 700;
+    box-shadow: 0 0 16px rgba(212, 175, 55, 0.4);
+    transform: scale(1.08);
+  }
+
+  /* Gold divider */
+  .gold-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+    opacity: 0.5;
+  }
+
+  /* CTA Button — Gold */
+  .btn-gold {
+    background: #D4AF37;
+    color: #0A2342;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0.875rem 2rem;
+    border-radius: 4px;
+    border: none;
+    width: 100%;
+    transition: all 0.2s ease;
+    letter-spacing: 0.02em;
+  }
+
+  .btn-gold:hover {
+    background: #E8C84A;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(212, 175, 55, 0.3);
+  }
+
+  .btn-gold:active {
+    transform: translateY(0);
+  }
+
+  /* CTA Button — Magenta */
+  .btn-magenta {
+    background: #C2185B;
+    color: #FFFFFF;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0.875rem 2rem;
+    border-radius: 4px;
+    border: none;
+    width: 100%;
+    transition: all 0.2s ease;
+    letter-spacing: 0.02em;
+  }
+
+  .btn-magenta:hover {
+    background: #AD1457;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(194, 24, 91, 0.35);
+  }
+
+  /* Input fields */
+  .dru-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(212, 175, 55, 0.25);
+    border-radius: 4px;
+    padding: 0.875rem 1rem;
+    color: #E6E6E6;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+    outline: none;
+  }
+
+  .dru-input::placeholder {
+    color: rgba(230, 230, 230, 0.35);
+  }
+
+  select.dru-input {
+    appearance: auto;
+    -webkit-appearance: auto;
+    padding-right: 2rem;
+  }
+
+  .dru-input:focus {
+    border-color: #D4AF37;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* Progress bar */
+  .progress-bar-track {
+    height: 3px;
+    background: rgba(212, 175, 55, 0.15);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #D4AF37, #E8C84A);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  /* Pillar bar (results) */
+  .pillar-bar-track {
+    height: 8px;
+    background: rgba(212, 175, 55, 0.12);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .pillar-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #D4AF37, #E8C84A);
+    border-radius: 4px;
+    transition: width 1s ease;
+  }
+
+  /* Card surface */
+  .dru-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(212, 175, 55, 0.12);
+    border-radius: 8px;
+    padding: 1.25rem;
+  }
+
+  /* Spinner */
+  .gold-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(212, 175, 55, 0.2);
+    border-top-color: #D4AF37;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+   /* Count-up animation */
+  @keyframes countUp {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .count-up {
+    animation: countUp 0.6s ease forwards;
+  }
+  /* Scroll-down chevron bounce */
+  @keyframes chevronBounce {
+    0%, 100% { transform: translateY(0); opacity: 0.7; }
+    50% { transform: translateY(6px); opacity: 1; }
+  }
+  .scroll-chevron {
+    animation: chevronBounce 1.6s ease-in-out infinite;
+  }
+
+  /* Tier badge */
+  .tier-emerging { color: #E53935; }
+  .tier-developing { color: #D4AF37; }
+  .tier-advancing { color: #1E88E5; }
+  .tier-leading { color: #43A047; }
+
+  /* Shield watermark */
+  .shield-watermark {
+    position: absolute;
+    opacity: 0.03;
+    pointer-events: none;
+    user-select: none;
+  }
+}
