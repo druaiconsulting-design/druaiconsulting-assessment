@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+dist/
+dist-ssr/
+.env
+.env.local
+.env.production
+*.local
+vite.config.ts.timestamp-*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+**/sw.js
+**/sw.js.map
+**/workbox-*.js
+**/workbox-*.js.map
