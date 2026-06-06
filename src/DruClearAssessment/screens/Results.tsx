@@ -5,7 +5,6 @@ import { GAP_MESSAGES, TIER_MESSAGES, STRENGTH_MESSAGES, TIER_ONE_LINERS, BADGE_
 import { getPillarScore, getTier, sendWebhook, sendWebhookJson, saveToLocalStorage, normalizePhone, UTM_PARAMS } from "../utils";
 import { WEBHOOK_COMPLETE_URL } from "../config";
 import type { LeadData, Scores } from "../types";
-
 export default function Results({ lead, scores, onBookCall }: {
   lead: LeadData; scores: Scores; onBookCall: () => void;
 }) {
@@ -17,7 +16,6 @@ export default function Results({ lead, scores, onBookCall }: {
   const total           = clarityScore + leadershipScore + executionScore + alignmentScore + resultsScore;
   const scaledScore     = Math.round((total / 75) * 100);
   const tier            = getTier(total);
-
   const pillars = [
     { name: "Clarity",    score: clarityScore },
     { name: "Leadership", score: leadershipScore },
@@ -25,13 +23,11 @@ export default function Results({ lead, scores, onBookCall }: {
     { name: "Alignment",  score: alignmentScore },
     { name: "Results",    score: resultsScore },
   ];
-
   const sorted          = [...pillars].sort((a, b) => a.score - b.score);
   const topGaps         = sorted.filter((p) => p.score < 12).slice(0, 2);
   const strongestPillar = [...pillars].sort((a, b) => b.score - a.score)[0];
   const badgeUrl        = BADGE_URLS[tier.label];
   const percentile      = BENCHMARK_PERCENTILES[tier.label];
-
   const [displayScore,   setDisplayScore]   = useState(0);
   const [badgeVisible,   setBadgeVisible]   = useState(false);
   const [oneLineVisible, setOneLineVisible] = useState(false);
@@ -39,11 +35,9 @@ export default function Results({ lead, scores, onBookCall }: {
   const [shareLinkCopied,setShareLinkCopied]= useState(false);
   const [resultsCopied,  setResultsCopied]  = useState(false);
   const [showScrollHint, setShowScrollHint] = useState(true);
-
   const pillarSectionRef  = useRef<HTMLDivElement>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
   const sentRef           = useRef(false);
-
   // ── Score animation ────────────────────────────────────────────────────────
   useEffect(() => {
     const duration = 1200;
@@ -64,7 +58,6 @@ export default function Results({ lead, scores, onBookCall }: {
     return () => cancelAnimationFrame(rafId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   // ── Pillar scroll animation ────────────────────────────────────────────────
   useEffect(() => {
     const el = pillarSectionRef.current;
@@ -76,14 +69,12 @@ export default function Results({ lead, scores, onBookCall }: {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
   // ── Scroll hint ────────────────────────────────────────────────────────────
   useEffect(() => {
     const onScroll = () => { if (window.scrollY > 60) setShowScrollHint(false); };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
   // ── Confetti ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = confettiCanvasRef.current;
@@ -103,31 +94,26 @@ export default function Results({ lead, scores, onBookCall }: {
     animId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animId);
   }, []);
-
   // ── Send data (runs once) ──────────────────────────────────────────────────
   useEffect(() => {
     if (sentRef.current) return;
     sentRef.current = true;
-
     const LIKERT_MAP: Record<number, string> = { 1: "Strongly Disagree", 2: "Disagree", 3: "Neutral", 4: "Agree", 5: "Strongly Agree" };
     const answerLabel = (qIndex: number): string => LIKERT_MAP[scores[qIndex]] || "Not answered";
     const scorePct    = (total / 75) * 100;
     const scoreCategory = scorePct <= 33 ? "Low" : scorePct <= 66 ? "Medium" : "High";
-
     const formatTimestamp = (date: Date, tz: string, label: string): string => {
       const datePart = date.toLocaleDateString("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
       const timePart = date.toLocaleTimeString("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
       const [mo, dy, yr] = datePart.split("/");
       return `${yr}-${mo}-${dy} ${timePart} ${label}`;
     };
-
     const now       = new Date();
     const userTz    = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     const offsetMin = -now.getTimezoneOffset();
     const offsetHr  = Math.floor(Math.abs(offsetMin) / 60);
     const offsetMn  = Math.abs(offsetMin) % 60;
     const offsetLabel = `UTC${offsetMin >= 0 ? "+" : "-"}${String(offsetHr).padStart(2, "0")}${offsetMn ? ":" + String(offsetMn).padStart(2, "0") : ""}`;
-
     const mergedPayload = {
       event_type: "assessment_completed", tags: "Assessment-Completed",
       first_name: lead.firstName, last_name: lead.lastName, email: lead.email,
@@ -145,10 +131,8 @@ export default function Results({ lead, scores, onBookCall }: {
       question_13: answerLabel(12), question_14: answerLabel(13), question_15: answerLabel(14),
       timestamp: now.toISOString(),
     };
-
     saveToLocalStorage("assessment_completed", mergedPayload);
     sendWebhookJson(mergedPayload, WEBHOOK_COMPLETE_URL);
-
     // ── Create Supabase auth account ──────────────────────────────────────────
     (async () => {
       try {
@@ -156,11 +140,13 @@ export default function Results({ lead, scores, onBookCall }: {
         await supabase.auth.signUp({
           email: lead.email,
           password: randomPassword,
-          options: { data: { first_name: lead.firstName, full_name: `${lead.firstName} ${lead.lastName}`.trim(), tier: "free" } },
+          options: {
+            emailRedirectTo: 'https://members.druaiconsulting.com',
+            data: { first_name: lead.firstName, full_name: `${lead.firstName} ${lead.lastName}`.trim(), tier: "free" }
+          },
         });
       } catch {}
     })();
-
     // ── Write assessment data to Supabase submissions table ───────────────────
     (async () => {
       try {
@@ -203,7 +189,6 @@ export default function Results({ lead, scores, onBookCall }: {
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   // ── Actions ────────────────────────────────────────────────────────────────
   const handleBadgeDownload = async () => {
     if (!badgeUrl) return;
@@ -216,7 +201,6 @@ export default function Results({ lead, scores, onBookCall }: {
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     } catch { window.open(badgeUrl, "_blank"); }
   };
-
   const handleShareScore = async () => {
     const shareText = `I just scored ${scaledScore}/100 on the AI Readiness Assessment! Take yours here: https://assessment.druaiconsulting.com`;
     if (typeof navigator !== "undefined" && navigator.share) {
@@ -226,16 +210,13 @@ export default function Results({ lead, scores, onBookCall }: {
       setShareLinkCopied(true); setTimeout(() => setShareLinkCopied(false), 2000);
     }
   };
-
   const handleCopyResultsLink = () => {
     const refParam = lead.email ? `?ref=${encodeURIComponent(lead.email)}` : "";
     const url = `https://assessment.druaiconsulting.com${refParam}&score=${scaledScore}&result=${tier.label}`;
     navigator.clipboard.writeText(url).then(() => { setResultsCopied(true); setTimeout(() => setResultsCopied(false), 2500); }).catch(() => { const el = document.createElement("textarea"); el.value = url; document.body.appendChild(el); el.select(); document.execCommand("copy"); document.body.removeChild(el); setResultsCopied(true); setTimeout(() => setResultsCopied(false), 2500); });
     sendWebhook({ event_type: "share_click", channel: "clipboard", first_name: lead.firstName, last_name: lead.lastName, email: lead.email, score: scaledScore, result: tier.label, ai_country_name: lead.country_name || "", ai_country_iso: lead.country_iso || "", ...UTM_PARAMS, timestamp: new Date().toISOString() });
   };
-
   const oneLiner = TIER_ONE_LINERS[tier.label];
-
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="screen-enter flex flex-col" style={{ minHeight: "100dvh", background: "#0A2342", overflowX: "hidden", padding: "clamp(1rem, 4vw, 1.5rem) clamp(0.875rem, 4vw, 1.25rem) 2rem", maxWidth: 480, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
@@ -244,7 +225,6 @@ export default function Results({ lead, scores, onBookCall }: {
         <DruLogo height={80} />
         <span className="text-xs" style={{ color: "rgba(230,230,230,0.35)", fontFamily: "'Inter', sans-serif" }}>Page 7 of 9</span>
       </div>
-
       {/* Score */}
       <div className="flex flex-col items-center mb-4" style={{ gap: "0.75rem" }}>
         <div className="text-center">
@@ -256,17 +236,14 @@ export default function Results({ lead, scores, onBookCall }: {
         <div className="font-bold tracking-widest px-4 py-2 rounded" style={{ color: tier.color, border: `1.5px solid ${tier.color}`, fontFamily: "'Inter', sans-serif", background: `${tier.color}18`, fontSize: "clamp(0.8rem, 4vw, 1rem)", letterSpacing: "0.12em", opacity: badgeVisible ? 1 : 0, transform: badgeVisible ? "scale(1)" : "scale(0.8)", transition: "opacity 0.4s ease, transform 0.4s ease" }}>{tier.label}</div>
         {oneLiner && <p style={{ color: oneLiner.color, fontStyle: "italic", fontSize: "clamp(0.78rem, 3.2vw, 0.88rem)", lineHeight: 1.55, textAlign: "center", maxWidth: 320, margin: "0.1rem 0 0", opacity: oneLineVisible ? 1 : 0, transition: "opacity 0.5s ease", fontFamily: "'Lato', sans-serif" }}>{oneLiner.text}</p>}
       </div>
-
       {/* Share */}
       <div className="flex justify-center mb-4">
         <button onClick={handleShareScore} style={{ display: "flex", alignItems: "center", gap: "0.45rem", padding: "0.65rem 1.4rem", background: `${tier.color}18`, color: tier.color, border: `1.5px solid ${tier.color}60`, borderRadius: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 700, fontSize: "clamp(0.8rem, 3.5vw, 0.9rem)", letterSpacing: "0.04em", cursor: "pointer", transition: "background 0.2s, border-color 0.2s" }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = `${tier.color}30`; }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = `${tier.color}18`; }}>
           {shareLinkCopied ? (<><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>Link Copied!</>) : (<><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>Share Your Score</>)}
         </button>
       </div>
-
       {/* Percentile */}
       <p className="text-xs text-center mb-4" style={{ color: "rgba(212,175,55,0.75)", fontStyle: "italic", lineHeight: 1.6, padding: "0 0.5rem" }}>You scored higher than <strong style={{ color: "#D4AF37" }}>{percentile}%</strong> of organizations assessed on AI readiness.</p>
-
       {/* Scroll hint */}
       {showScrollHint && (
         <div className="flex flex-col items-center mb-3" style={{ pointerEvents: "none" }}>
@@ -274,7 +251,6 @@ export default function Results({ lead, scores, onBookCall }: {
           <svg className="scroll-chevron" width="20" height="12" viewBox="0 0 20 12" fill="none"><path d="M2 2L10 10L18 2" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </div>
       )}
-
       {/* Badge */}
       {badgeUrl && (
         <div className="flex flex-col items-center mb-4" style={{ gap: "0.4rem", position: "relative", zIndex: 1 }}>
@@ -284,9 +260,7 @@ export default function Results({ lead, scores, onBookCall }: {
           <p style={{ color: "rgba(212,175,55,0.55)", fontSize: "0.65rem", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>Tap to save &amp; share</p>
         </div>
       )}
-
       <div className="gold-divider mb-3" />
-
       {/* Pillar breakdown */}
       <div className="mb-4" ref={pillarSectionRef}>
         <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "rgba(212,175,55,0.7)" }}>Pillar Breakdown</h3>
@@ -304,9 +278,7 @@ export default function Results({ lead, scores, onBookCall }: {
           ))}
         </div>
       </div>
-
       <div className="gold-divider mb-3" />
-
       {/* Strongest pillar */}
       {strongestPillar && (
         <div className="mb-4">
@@ -322,7 +294,6 @@ export default function Results({ lead, scores, onBookCall }: {
           </div>
         </div>
       )}
-
       {/* Top gaps */}
       {topGaps.length > 0 && (
         <div className="mb-4">
@@ -342,22 +313,17 @@ export default function Results({ lead, scores, onBookCall }: {
           </div>
         </div>
       )}
-
       {/* Tier message */}
       <div className="dru-card mb-4" style={{ padding: "0.75rem 0.875rem" }}>
         <p style={{ color: "#E6E6E6", fontSize: "clamp(0.65rem, 2.8vw, 0.7rem)", lineHeight: 1.7 }}>{TIER_MESSAGES[tier.label]}</p>
       </div>
-
       <ResultsTransitionBlock onContinue={onBookCall} />
-
       {/* Copy link */}
       <button onClick={handleCopyResultsLink} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", width: "100%", padding: "0.65rem 1rem", marginBottom: "1rem", background: resultsCopied ? "rgba(212,175,55,0.12)" : "transparent", color: resultsCopied ? "#D4AF37" : "rgba(212,175,55,0.7)", border: `1px solid ${resultsCopied ? "#D4AF37" : "rgba(212,175,55,0.3)"}`, borderRadius: 4, fontFamily: "'Montserrat', sans-serif", fontWeight: 700, fontSize: "0.8rem", letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.2s" }}>
         {resultsCopied ? (<><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7L5.5 10.5L12 3.5" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>LINK COPIED!</>) : (<><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 1H13V5M13 1L7 7M6 3H2C1.44772 3 1 3.44772 1 4V12C1 12.5523 1.44772 13 2 13H10C10.5523 13 11 12.5523 11 12V8" stroke="rgba(212,175,55,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>COPY MY RESULTS LINK</>)}
       </button>
-
       {/* Disclaimer */}
       <p className="text-center mb-4" style={{ color: "#E6E6E6", fontSize: "0.65rem", lineHeight: 1.6, opacity: 0.6, maxWidth: 400, margin: "0 auto 1rem" }}>This assessment is for informational purposes only and does not constitute professional consulting advice. Results are based on your self-reported responses. For a personalized strategy, book a consultation with DRU AI Consulting.</p>
-
       {/* Footer branding */}
       <div className="flex items-center justify-center gap-3">
         <DruLogo height={120} />
