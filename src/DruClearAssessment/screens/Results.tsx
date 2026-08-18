@@ -145,6 +145,13 @@ export default function Results({ lead, scores, onBookCall }: {
             data: { first_name: lead.firstName, full_name: `${lead.firstName} ${lead.lastName}`.trim(), tier: "free" }
           },
         });
+        // Tag this new free-tier member in GHL (Aug 2026) — fire-and-forget, does not
+        // block or affect the signup itself if it fails.
+        fetch('https://app.druaiconsulting.com/api/ghl-tag-freetier', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: lead.email }),
+        }).catch(() => {});
       } catch {}
     })();
     // ── Write assessment data to Supabase submissions table ───────────────────
