@@ -142,7 +142,7 @@ export default function Results({ lead, scores, onBookCall }: {
           password: randomPassword,
           options: {
             emailRedirectTo: 'https://members.druaiconsulting.com',
-            data: { first_name: lead.firstName, full_name: `${lead.firstName} ${lead.lastName}`.trim(), tier: "free" }
+            data: { first_name: lead.firstName, full_name: `${lead.firstName} ${lead.lastName}`.trim(), tier: "free", newsletter_subscribed: lead.newsletterSubscribed ?? false }
           },
         });
         // Tag this new free-tier member in GHL (Aug 2026) — fire-and-forget, does not
