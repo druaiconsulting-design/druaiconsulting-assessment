@@ -67,6 +67,7 @@ export default function LeadCapture({ onContinue }: { onContinue: (data: LeadDat
   const [emailError, setEmailError] = useState("");
   const [emailSuggestion, setEmailSuggestion] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const emailVerifyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleEmailBlur = async () => {
@@ -106,7 +107,7 @@ export default function LeadCapture({ onContinue }: { onContinue: (data: LeadDat
     saveToLocalStorage("form_submitted", payload);
     await sendWebhookJson(payload, WEBHOOK_LEAD_URL);
     setLoading(false);
-    onContinue({ ...form, phone: normalizePhone(countryCode.code + (form.phone || "")), country_name: countryCode.name, country_iso: countryCode.iso });
+    onContinue({ ...form, phone: normalizePhone(countryCode.code + (form.phone || "")), country_name: countryCode.name, country_iso: countryCode.iso, newsletterSubscribed });
   };
 
   return (
@@ -177,6 +178,17 @@ export default function LeadCapture({ onContinue }: { onContinue: (data: LeadDat
           {submitted && !form.role && <p className="text-xs mt-1" style={{ color: "#E53935" }}>Required</p>}
         </div>
       </div>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem", marginBottom: "1.25rem", cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={newsletterSubscribed}
+          onChange={(e) => setNewsletterSubscribed(e.target.checked)}
+          style={{ marginTop: "0.2rem", width: "1rem", height: "1rem", flexShrink: 0, accentColor: "#D4AF37", cursor: "pointer" }}
+        />
+        <span className="text-xs leading-relaxed" style={{ color: "rgba(230,230,230,0.7)" }}>
+          Send me the LEAD, CLARITY, WIN! Newsletter — weekly insights on leadership and AI.
+        </span>
+      </label>
       {error && <p className="text-sm mb-4" style={{ color: "#E53935" }}>{error}</p>}
       <button className="btn-gold" onClick={handleSubmit} disabled={loading}>{loading ? "Saving..." : "Continue →"}</button>
     </div>
