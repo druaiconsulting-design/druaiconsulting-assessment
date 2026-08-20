@@ -56,6 +56,15 @@ export default function Share({ lead, scores, onRevisit }: {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(colleagueEmail.trim())) { setColleagueError("Please enter a valid email address."); return; }
     setColleagueError("");
     sendWebhook({ event_type: "referral_email_sent", referrer_email: lead.email, referrer_name: `${lead.firstName} ${lead.lastName}`, referred_email: colleagueEmail.trim(), referral_link: assessmentUrl, score: scaledScore, result: tier.label, ...UTM_PARAMS, timestamp: new Date().toISOString() });
+    // Creates a live GHL contact for the referred colleague, tagged referral-pending, so
+    // they show up in Omar's next lead scan — separate from the email send above (which
+    // already works and is untouched). Fire-and-forget: never blocks or affects the
+    // confirmation below, which only reflects the referral email itself.
+    fetch("https://app.druaiconsulting.com/api/ghl-tag-referral", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ referred_email: colleagueEmail.trim() }),
+    }).catch(() => {});
     setColleagueSent(true);
   };
 
