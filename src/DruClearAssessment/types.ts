@@ -26,6 +26,7 @@ export interface LeadData {
   country_iso?: string;
   company: string;
   role: string;
+  newsletterSubscribed?: boolean;
 }
 
 export interface Scores {
