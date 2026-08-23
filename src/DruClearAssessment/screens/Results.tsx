@@ -133,8 +133,14 @@ export default function Results({ lead, scores, onBookCall }: {
     };
     saveToLocalStorage("assessment_completed", mergedPayload);
     sendWebhookJson(mergedPayload, WEBHOOK_COMPLETE_URL);
-    // ── Create Supabase auth account ──────────────────────────────────────────
+    // ── Create Supabase auth account, tag in GHL, then write submissions ──────
+    // Combined into one sequential flow (Aug 23, 2026) so the real GHL contactId —
+    // previously thrown away as fire-and-forget — gets carried onto the submissions
+    // row. ghl_contact_id is the shared identity spine Omar/Aaliyah/client_journey_stages
+    // all key off of; without it here, nothing downstream can ever be linked back to
+    // where this person came from or what they answered.
     (async () => {
+      let ghlContactId: string | null = null;
       try {
         const randomPassword = crypto.randomUUID() + crypto.randomUUID();
         await supabase.auth.signUp({
@@ -145,17 +151,21 @@ export default function Results({ lead, scores, onBookCall }: {
             data: { first_name: lead.firstName, full_name: `${lead.firstName} ${lead.lastName}`.trim(), tier: "free", newsletter_subscribed: lead.newsletterSubscribed ?? false }
           },
         });
-        // Tag this new free-tier member in GHL (Aug 2026) — fire-and-forget, does not
-        // block or affect the signup itself if it fails.
-        fetch('https://app.druaiconsulting.com/api/ghl-tag-freetier', {
+      } catch {}
+      try {
+        // Awaited now (was fire-and-forget) so we can capture the real contactId
+        // it returns — the whole point of this call, previously discarded.
+        const tagRes = await fetch('https://app.druaiconsulting.com/api/ghl-tag-freetier', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: lead.email }),
-        }).catch(() => {});
+        });
+        if (tagRes.ok) {
+          const tagData = await tagRes.json();
+          ghlContactId = tagData?.contactId ?? null;
+        }
       } catch {}
-    })();
-    // ── Write assessment data to Supabase submissions table ───────────────────
-    (async () => {
+      // ── Write assessment data to Supabase submissions table ─────────────────
       try {
         const topGapsComputed = [...pillars]
           .sort((a, b) => a.score - b.score)
@@ -172,6 +182,7 @@ export default function Results({ lead, scores, onBookCall }: {
           role:       lead.role,
           country_name: lead.country_name || "",
           country_iso:  lead.country_iso  || "",
+          ghl_contact_id:   ghlContactId,
           total_score:      scaledScore,
           tier:             tier.label,
           score_category:   scoreCategory,
