@@ -229,7 +229,7 @@ export default function PreSessionQuestionnaire() {
         {submission?.tier && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
             {BADGE_URLS[submission.tier] && (
-              <img src={BADGE_URLS[submission.tier]} alt={submission.tier} style={{ height: 28 }} />
+              <img src={BADGE_URLS[submission.tier]} alt={submission.tier} style={{ height: 96 }} />
             )}
             <span style={{ color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 14, letterSpacing: 1 }}>{submission.tier}</span>
           </div>
