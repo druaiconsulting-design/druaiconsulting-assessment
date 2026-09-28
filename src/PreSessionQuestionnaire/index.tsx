@@ -264,12 +264,12 @@ export default function PreSessionQuestionnaire() {
                         </div>
                         {clearMeta.questions.map((qText, i) => (
                           <p key={i} style={{ margin: '0 0 8px 0', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 14 }}>
-                            &ldquo;{qText}&rdquo; &rarr; Their answer:{' '}
+                            &ldquo;{qText}&rdquo; &rarr; Your answer:{' '}
                             <strong style={{ color: '#fff' }}>{(submission as any)[clearMeta.qFields[i]] ?? '—'}</strong>
                           </p>
                         ))}
                         <p style={{ margin: '8px 0 0 0', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 14 }}>
-                          Their badge: <strong style={{ color: '#fff' }}>{submission.tier}</strong>
+                          Your badge: <strong style={{ color: '#fff' }}>{submission.tier}</strong>
                         </p>
                         <p style={{ margin: '8px 0 0 0', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 14 }}>
                           What this means:{' '}
@@ -283,7 +283,7 @@ export default function PreSessionQuestionnaire() {
                     )}
 
                     <div style={{ marginTop: clearMeta ? 16 : 0 }}>
-                      <div style={{ fontSize: 12, letterSpacing: 1, color: MAGENTA, marginBottom: 10, fontFamily: 'Inter, sans-serif' }}>
+                      <div style={{ fontSize: 12, letterSpacing: 1, color: GOLD, marginBottom: 10, fontFamily: 'Inter, sans-serif' }}>
                         {framework === 'CLEAR' ? 'Deeper Dive: Complete these tasks before your session:' : ''}
                       </div>
                       {pillarRows.map((row, idx) => (
