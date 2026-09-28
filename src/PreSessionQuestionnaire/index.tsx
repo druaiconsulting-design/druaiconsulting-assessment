@@ -224,7 +224,7 @@ export default function PreSessionQuestionnaire() {
           {answeredCount} of {totalCount} answered
         </div>
         <h1 style={{ ...headingStyle, fontSize: 32, marginBottom: 4 }}>
-          {diagnosticTier === 'executive' ? 'Executive Diagnostic' : 'Strategic Diagnostic'} — Pre-Session Questionnaire
+          {diagnosticTier === 'executive' ? 'Executive Diagnostic' : 'Strategic Diagnostic'} Pre-Session Questionnaire
         </h1>
         {submission?.tier && (
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32 }}>
@@ -259,7 +259,7 @@ export default function PreSessionQuestionnaire() {
                     {clearMeta && submission && (
                       <div style={reminderBoxStyle}>
                         <div style={{ fontSize: 12, letterSpacing: 1, color: GOLD, marginBottom: 8, fontFamily: 'Inter, sans-serif' }}>
-                          Already on record; solely from the assessment reminder.
+                          The assessment questions and answers on record, solely as a reminder
                         </div>
                         {clearMeta.questions.map((qText, i) => (
                           <p key={i} style={{ margin: '0 0 8px 0', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 14 }}>
