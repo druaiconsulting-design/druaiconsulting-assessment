@@ -227,11 +227,10 @@ export default function PreSessionQuestionnaire() {
           {diagnosticTier === 'executive' ? 'Executive Diagnostic' : 'Strategic Diagnostic'} — Pre-Session Questionnaire
         </h1>
         {submission?.tier && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32 }}>
             {BADGE_URLS[submission.tier] && (
-              <img src={BADGE_URLS[submission.tier]} alt={submission.tier} style={{ height: 96 }} />
+              <img src={BADGE_URLS[submission.tier]} alt={submission.tier} style={{ height: 220 }} />
             )}
-            <span style={{ color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 14, letterSpacing: 1 }}>{submission.tier}</span>
           </div>
         )}
 
