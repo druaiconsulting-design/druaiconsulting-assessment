@@ -132,6 +132,7 @@ export default function PreSessionQuestionnaire() {
   const [rows, setRows] = useState<QuestionRow[]>([]);
   const [submission, setSubmission] = useState<SubmissionRow | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [token, setToken] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -141,49 +142,44 @@ export default function PreSessionQuestionnaire() {
       setLoading(false);
       return;
     }
+    setToken(token);
     load(token);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function load(token: string) {
-    const { data: responseRows, error } = await supabase
-      .from('diagnostic_responses')
-      .select('id, question_id, answer_text, email, diagnostic_tier, diagnostic_questions(framework, pillar, question_order, question_text)')
-      .eq('access_token', token);
+    const { data, error } = await supabase.rpc('get_presession', { p_token: token });
 
-    if (error || !responseRows || responseRows.length === 0) {
+    const result = data as {
+      email: string;
+      diagnostic_tier: 'strategic' | 'executive';
+      rows: QuestionRow[];
+      submission: SubmissionRow | null;
+    } | null;
+
+    if (error || !result || !result.rows || result.rows.length === 0) {
       setNotFound(true);
       setLoading(false);
       return;
     }
 
-    const first = responseRows[0] as any;
-    setEmail(first.email);
-    setDiagnosticTier(first.diagnostic_tier);
-    setRows(responseRows as unknown as QuestionRow[]);
-
-    const { data: submissionRow } = await supabase
-      .from('submissions')
-      .select(
-        'first_name, tier, clarity_score, leadership_score, execution_score, alignment_score, results_score, q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,q12,q13,q14,q15'
-      )
-      .eq('email', first.email)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    setSubmission((submissionRow as unknown as SubmissionRow) ?? null);
+    setEmail(result.email);
+    setDiagnosticTier(result.diagnostic_tier);
+    setRows(result.rows);
+    setSubmission(result.submission ?? null);
     setLoading(false);
   }
 
   const saveAnswer = useCallback(async (rowId: string, value: string) => {
-    await supabase
-      .from('diagnostic_responses')
-      .update({ answer_text: value, last_saved_at: new Date().toISOString() })
-      .eq('id', rowId);
+    const { data, error } = await supabase.rpc('save_presession_answer', {
+      p_token: token,
+      p_row_id: rowId,
+      p_answer: value,
+    });
+    if (error || data !== true) return;
     setSavedId(rowId);
     setTimeout(() => setSavedId((cur) => (cur === rowId ? null : cur)), 1800);
-  }, []);
+  }, [token]);
 
   function updateLocalAnswer(rowId: string, value: string) {
     setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, answer_text: value } : r)));
