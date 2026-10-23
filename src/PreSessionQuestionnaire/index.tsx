@@ -297,6 +297,27 @@ export default function PreSessionQuestionnaire() {
   async function handleSubmit() {
     setSubmitting(true);
     setSubmitNote('');
+    // Save everything currently on the screen first, so a box the client just typed in
+    // (and has not clicked out of yet) is on file before the check runs.
+    const pending: Array<PromiseLike<unknown>> = [];
+    for (const r of rows) {
+      pending.push(
+        supabase.rpc('save_presession_answer', { p_token: token, p_row_id: r.id, p_answer: r.answer_text ?? '' })
+      );
+    }
+    for (const k of FIXED_NUMBER_KEYS) {
+      const n = parseNumber(numbers[k] ?? '');
+      if (n !== null) {
+        pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: k, p_item_index: 1, p_value: n }));
+      }
+    }
+    for (const b of resultBoxes) {
+      const n = parseNumber(b.value);
+      if (n !== null) {
+        pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: RESULTS_KEY, p_item_index: b.idx, p_value: n }));
+      }
+    }
+    await Promise.all(pending);
     const { data, error } = await supabase.rpc('submit_presession', { p_token: token });
     const result = data as { ok: boolean; submitted_at?: string } | null;
     if (!error && result?.ok) {
@@ -532,7 +553,7 @@ export default function PreSessionQuestionnaire() {
           </div>
         )}
 
-        {isComplete && (
+        {isComplete && numbersComplete && (
           <div style={{ textAlign: 'center', padding: 24, border: `1px solid ${GOLD}`, borderRadius: 4, marginBottom: 24 }}>
             <p style={{ margin: 0, color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 15 }}>
               Complete — every question has an answer on file. See you on the call.
