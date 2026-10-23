@@ -142,6 +142,11 @@ function parseNumber(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Clarity Q2 is answered by its Dollars and Weeks boxes alone, so it has no written-answer box.
+function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
+  return framework === 'CLEAR' && pillar === 'Clarity' && questionOrder === 2;
+}
+
 interface QuestionRow {
   id: string;
   question_id: string;
@@ -301,6 +306,8 @@ export default function PreSessionQuestionnaire() {
     // (and has not clicked out of yet) is on file before the check runs.
     const pending: Array<PromiseLike<unknown>> = [];
     for (const r of rows) {
+      const dq = r.diagnostic_questions;
+      if (isNumbersOnlyQuestion(dq.framework, dq.pillar, dq.question_order)) continue;
       pending.push(
         supabase.rpc('save_presession_answer', { p_token: token, p_row_id: r.id, p_answer: r.answer_text ?? '' })
       );
@@ -349,8 +356,11 @@ export default function PreSessionQuestionnaire() {
     );
   }
 
-  const totalCount = rows.length;
-  const answeredCount = rows.filter((r) => (r.answer_text ?? '').trim().length > 0).length;
+  const writtenRows = rows.filter(
+    (r) => !isNumbersOnlyQuestion(r.diagnostic_questions.framework, r.diagnostic_questions.pillar, r.diagnostic_questions.question_order)
+  );
+  const totalCount = writtenRows.length;
+  const answeredCount = writtenRows.filter((r) => (r.answer_text ?? '').trim().length > 0).length;
   const isComplete = totalCount > 0 && answeredCount === totalCount;
 
   const hasClear = rows.some((r) => r.diagnostic_questions.framework === 'CLEAR');
@@ -446,15 +456,19 @@ export default function PreSessionQuestionnaire() {
                               {framework === 'CLEAR' ? `${idx + 1}. ` : ''}
                               {row.diagnostic_questions.question_text}
                             </label>
-                            <textarea
-                              defaultValue={row.answer_text ?? ''}
-                              onChange={(e) => updateLocalAnswer(row.id, e.target.value)}
-                              onBlur={(e) => saveAnswer(row.id, e.target.value)}
-                              rows={3}
-                              style={textareaStyle}
-                            />
-                            {savedId === row.id && (
-                              <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                            {!isNumbersOnlyQuestion(framework, pillar, row.diagnostic_questions.question_order) && (
+                              <>
+                                <textarea
+                                  defaultValue={row.answer_text ?? ''}
+                                  onChange={(e) => updateLocalAnswer(row.id, e.target.value)}
+                                  onBlur={(e) => saveAnswer(row.id, e.target.value)}
+                                  rows={3}
+                                  style={textareaStyle}
+                                />
+                                {savedId === row.id && (
+                                  <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                )}
+                              </>
                             )}
 
                             {numberFields.length > 0 && (
