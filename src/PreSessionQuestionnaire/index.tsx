@@ -99,6 +99,49 @@ const CLOSING_TEXT: Record<string, string> = {
     'Insight delineates four distinct frameworks: DRU CLEAR™, 5D Leadership™, 5C Cultural DNA™, and AI Sales Mastery™. The DRU AI Transformation Pathway™ integrally advances all four frameworks through a comprehensive Full Ecosystem sequence spanning ninety days: Discover, Diagnose, Design, Deploy, and Dominate. This process includes twelve sessions, with each stage systematically building on the previous one. Kindly specify the framework designated to commence the sequence.',
 };
 
+// ── Number boxes: one set under each CLEAR question that asks for figures ─────
+// Each box saves under its field key. The Results question asks for the value of
+// each initiative, so its boxes are added one at a time (results_value, index 1+).
+interface NumberField {
+  key: string;
+  label: string;
+}
+
+const NUMBER_FIELDS: Record<string, NumberField[]> = {
+  'Clarity:2': [
+    { key: 'clarity_dollars', label: 'Dollars ($)' },
+    { key: 'clarity_weeks', label: 'Weeks' },
+  ],
+  'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: 'Leaders who succeeded' }],
+  'Leadership:2': [
+    { key: 'leadership_stalled_decisions', label: 'Stalled decisions' },
+    { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives' },
+    { key: 'leadership_missed_cycles', label: 'Missed cycles' },
+  ],
+  'Execution:2': [{ key: 'execution_dollars', label: 'Dollars this quarter ($)' }],
+  'Alignment:2': [
+    { key: 'alignment_hours_first', label: 'Hours, first department' },
+    { key: 'alignment_hours_second', label: 'Hours, second department' },
+  ],
+};
+
+const FIXED_NUMBER_KEYS: string[] = Object.values(NUMBER_FIELDS).flatMap((fields) => fields.map((f) => f.key));
+const RESULTS_KEY = 'results_value';
+const MAX_INITIATIVES = 100;
+
+interface ResultBox {
+  idx: number;
+  value: string;
+}
+
+// Digits, commas and one decimal point; 0 counts as a figure.
+function parseNumber(text: string): number | null {
+  const t = (text ?? '').replace(/,/g, '').trim();
+  if (!/^\d+(\.\d+)?$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
 interface QuestionRow {
   id: string;
   question_id: string;
@@ -133,6 +176,11 @@ export default function PreSessionQuestionnaire() {
   const [submission, setSubmission] = useState<SubmissionRow | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [token, setToken] = useState('');
+  const [numbers, setNumbers] = useState<Record<string, string>>({});
+  const [resultBoxes, setResultBoxes] = useState<ResultBox[]>([{ idx: 1, value: '' }]);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitNote, setSubmitNote] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -167,6 +215,24 @@ export default function PreSessionQuestionnaire() {
     setDiagnosticTier(result.diagnostic_tier);
     setRows(result.rows);
     setSubmission(result.submission ?? null);
+
+    // Saved number boxes and the submission time (a failure here leaves the boxes empty).
+    const numRes = await supabase.rpc('get_presession_numbers', { p_token: token });
+    const numData = numRes.data as {
+      numbers: Array<{ field_key: string; item_index: number; value: number }>;
+      submitted_at: string | null;
+    } | null;
+    if (!numRes.error && numData) {
+      const fixed: Record<string, string> = {};
+      const results: ResultBox[] = [];
+      for (const n of numData.numbers ?? []) {
+        if (n.field_key === RESULTS_KEY) results.push({ idx: n.item_index, value: String(n.value) });
+        else fixed[n.field_key] = String(n.value);
+      }
+      setNumbers(fixed);
+      if (results.length > 0) setResultBoxes(results.sort((a, b) => a.idx - b.idx));
+      setSubmittedAt(numData.submitted_at ?? null);
+    }
     setLoading(false);
   }
 
@@ -183,6 +249,62 @@ export default function PreSessionQuestionnaire() {
 
   function updateLocalAnswer(rowId: string, value: string) {
     setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, answer_text: value } : r)));
+  }
+
+  // A figure saves when the client leaves its box, and only when it is a valid number.
+  const saveNumber = useCallback(async (fieldKey: string, itemIndex: number, text: string) => {
+    const n = parseNumber(text);
+    if (n === null) return;
+    const { data, error } = await supabase.rpc('save_presession_number', {
+      p_token: token,
+      p_field_key: fieldKey,
+      p_item_index: itemIndex,
+      p_value: n,
+    });
+    if (error || data !== true) return;
+    const savedKey = `${fieldKey}:${itemIndex}`;
+    setSavedId(savedKey);
+    setTimeout(() => setSavedId((cur) => (cur === savedKey ? null : cur)), 1800);
+  }, [token]);
+
+  function changeNumber(fieldKey: string, text: string) {
+    if (!/^[0-9.,]*$/.test(text)) return;
+    setNumbers((prev) => ({ ...prev, [fieldKey]: text }));
+  }
+
+  function changeResult(idx: number, text: string) {
+    if (!/^[0-9.,]*$/.test(text)) return;
+    setResultBoxes((prev) => prev.map((b) => (b.idx === idx ? { ...b, value: text } : b)));
+  }
+
+  function addInitiative() {
+    setResultBoxes((prev) => {
+      if (prev.length >= MAX_INITIATIVES) return prev;
+      const next = Math.max(...prev.map((b) => b.idx)) + 1;
+      return [...prev, { idx: next, value: '' }];
+    });
+  }
+
+  async function removeInitiative(idx: number) {
+    setResultBoxes((prev) => prev.filter((b) => b.idx !== idx));
+    await supabase.rpc('delete_presession_number', {
+      p_token: token,
+      p_field_key: RESULTS_KEY,
+      p_item_index: idx,
+    });
+  }
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setSubmitNote('');
+    const { data, error } = await supabase.rpc('submit_presession', { p_token: token });
+    const result = data as { ok: boolean; submitted_at?: string } | null;
+    if (!error && result?.ok) {
+      setSubmittedAt(result.submitted_at ?? new Date().toISOString());
+    } else {
+      setSubmitNote('Some answers or numbers are not saved yet. Click out of each box once, then submit again.');
+    }
+    setSubmitting(false);
   }
 
   if (loading) {
@@ -209,6 +331,14 @@ export default function PreSessionQuestionnaire() {
   const totalCount = rows.length;
   const answeredCount = rows.filter((r) => (r.answer_text ?? '').trim().length > 0).length;
   const isComplete = totalCount > 0 && answeredCount === totalCount;
+
+  const hasClear = rows.some((r) => r.diagnostic_questions.framework === 'CLEAR');
+  const fixedFilled = FIXED_NUMBER_KEYS.filter((k) => parseNumber(numbers[k] ?? '') !== null).length;
+  const resultsFilled = resultBoxes.filter((b) => parseNumber(b.value) !== null).length;
+  const numbersTotal = hasClear ? FIXED_NUMBER_KEYS.length + resultBoxes.length : 0;
+  const numbersFilled = hasClear ? fixedFilled + resultsFilled : 0;
+  const numbersComplete = !hasClear || numbersFilled === numbersTotal;
+  const canSubmit = isComplete && numbersComplete && !submitting;
 
   const frameworksPresent = FRAMEWORK_ORDER.filter((fw) => rows.some((r) => r.diagnostic_questions.framework === fw));
 
@@ -281,24 +411,103 @@ export default function PreSessionQuestionnaire() {
                       <div style={{ fontSize: 12, letterSpacing: 1, color: GOLD, marginBottom: 10, fontFamily: 'Inter, sans-serif' }}>
                         {framework === 'CLEAR' ? 'Deeper Dive: Complete these tasks before your session:' : ''}
                       </div>
-                      {pillarRows.map((row, idx) => (
-                        <div key={row.id} style={{ marginBottom: 16 }}>
-                          <label style={{ display: 'block', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 15, marginBottom: 6 }}>
-                            {framework === 'CLEAR' ? `${idx + 1}. ` : ''}
-                            {row.diagnostic_questions.question_text}
-                          </label>
-                          <textarea
-                            defaultValue={row.answer_text ?? ''}
-                            onChange={(e) => updateLocalAnswer(row.id, e.target.value)}
-                            onBlur={(e) => saveAnswer(row.id, e.target.value)}
-                            rows={3}
-                            style={textareaStyle}
-                          />
-                          {savedId === row.id && (
-                            <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
-                          )}
-                        </div>
-                      ))}
+                      {pillarRows.map((row, idx) => {
+                        const numberFields =
+                          framework === 'CLEAR'
+                            ? NUMBER_FIELDS[`${pillar}:${row.diagnostic_questions.question_order}`] ?? []
+                            : [];
+                        const isResultsValueQuestion =
+                          framework === 'CLEAR' && pillar === 'Results' && row.diagnostic_questions.question_order === 2;
+
+                        return (
+                          <div key={row.id} style={{ marginBottom: 16 }}>
+                            <label style={{ display: 'block', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 15, marginBottom: 6 }}>
+                              {framework === 'CLEAR' ? `${idx + 1}. ` : ''}
+                              {row.diagnostic_questions.question_text}
+                            </label>
+                            <textarea
+                              defaultValue={row.answer_text ?? ''}
+                              onChange={(e) => updateLocalAnswer(row.id, e.target.value)}
+                              onBlur={(e) => saveAnswer(row.id, e.target.value)}
+                              rows={3}
+                              style={textareaStyle}
+                            />
+                            {savedId === row.id && (
+                              <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                            )}
+
+                            {numberFields.length > 0 && (
+                              <div style={numberRowStyle}>
+                                {numberFields.map((f) => (
+                                  <div key={f.key} style={numberCellStyle}>
+                                    <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>
+                                    <input
+                                      id={`num-${f.key}`}
+                                      type="text"
+                                      inputMode="decimal"
+                                      autoComplete="off"
+                                      value={numbers[f.key] ?? ''}
+                                      onChange={(e) => changeNumber(f.key, e.target.value)}
+                                      onBlur={(e) => saveNumber(f.key, 1, e.target.value)}
+                                      style={numberInputStyle}
+                                    />
+                                    {savedId === `${f.key}:1` && (
+                                      <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {isResultsValueQuestion && (
+                              <div style={{ marginTop: 10 }}>
+                                <div style={numberRowStyle}>
+                                  {resultBoxes.map((b, pos) => (
+                                    <div key={b.idx} style={numberCellStyle}>
+                                      <label htmlFor={`num-results-${b.idx}`} style={numberLabelStyle}>
+                                        Initiative {pos + 1} value ($)
+                                      </label>
+                                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <input
+                                          id={`num-results-${b.idx}`}
+                                          type="text"
+                                          inputMode="decimal"
+                                          autoComplete="off"
+                                          value={b.value}
+                                          onChange={(e) => changeResult(b.idx, e.target.value)}
+                                          onBlur={(e) => saveNumber(RESULTS_KEY, b.idx, e.target.value)}
+                                          style={numberInputStyle}
+                                        />
+                                        {pos > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => removeInitiative(b.idx)}
+                                            aria-label={`Remove initiative ${pos + 1}`}
+                                            style={removeButtonStyle}
+                                          >
+                                            Remove
+                                          </button>
+                                        )}
+                                      </div>
+                                      {savedId === `${RESULTS_KEY}:${b.idx}` && (
+                                        <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={addInitiative}
+                                  disabled={resultBoxes.length >= MAX_INITIATIVES}
+                                  style={addButtonStyle}
+                                >
+                                  Add another initiative
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -324,12 +533,37 @@ export default function PreSessionQuestionnaire() {
         )}
 
         {isComplete && (
-          <div style={{ textAlign: 'center', padding: 24, border: `1px solid ${GOLD}`, borderRadius: 4 }}>
+          <div style={{ textAlign: 'center', padding: 24, border: `1px solid ${GOLD}`, borderRadius: 4, marginBottom: 24 }}>
             <p style={{ margin: 0, color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 15 }}>
               Complete — every question has an answer on file. See you on the call.
             </p>
           </div>
         )}
+
+        {/* Submit */}
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            style={{ ...submitButtonStyle, opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'not-allowed' }}
+          >
+            Submit
+          </button>
+          {!canSubmit && (
+            <div style={{ color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>
+              {answeredCount} of {totalCount} answers and {numbersFilled} of {numbersTotal} number boxes filled.
+            </div>
+          )}
+          {submittedAt && (
+            <div style={{ color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>
+              Submitted {new Date(submittedAt).toLocaleString()}
+            </div>
+          )}
+          {submitNote && (
+            <div style={{ color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>{submitNote}</div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -368,4 +602,71 @@ const textareaStyle: React.CSSProperties = {
   fontFamily: 'Inter, sans-serif',
   fontSize: 14,
   resize: 'vertical',
+};
+
+const numberRowStyle: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 14,
+  marginTop: 10,
+};
+
+const numberCellStyle: React.CSSProperties = {
+  flex: '1 1 180px',
+  minWidth: 160,
+};
+
+const numberLabelStyle: React.CSSProperties = {
+  display: 'block',
+  color: BODY_TEXT_ON_NAVY,
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 13,
+  marginBottom: 4,
+};
+
+const numberInputStyle: React.CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  backgroundColor: WARM_WHITE,
+  color: '#2C2C2C',
+  border: '1px solid rgba(212,175,55,0.5)',
+  borderRadius: 4,
+  padding: 10,
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 14,
+};
+
+const addButtonStyle: React.CSSProperties = {
+  marginTop: 12,
+  backgroundColor: 'transparent',
+  color: GOLD,
+  border: `1px solid ${GOLD}`,
+  borderRadius: 4,
+  padding: '8px 14px',
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 13,
+  cursor: 'pointer',
+};
+
+const removeButtonStyle: React.CSSProperties = {
+  backgroundColor: 'transparent',
+  color: BODY_TEXT_ON_NAVY,
+  border: '1px solid rgba(232,232,232,0.5)',
+  borderRadius: 4,
+  padding: '8px 10px',
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 12,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+const submitButtonStyle: React.CSSProperties = {
+  backgroundColor: GOLD,
+  color: NAVY,
+  border: 'none',
+  borderRadius: 4,
+  padding: '14px 40px',
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 16,
+  fontWeight: 700,
 };
