@@ -121,6 +121,10 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
     { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives', size: 'count' },
     { key: 'leadership_missed_cycles', label: 'Missed cycles', size: 'count' },
   ],
+  'Execution:1': [
+    { key: 'execution_regions_reached', label: 'Regions the pilot runs in', size: 'count' },
+    { key: 'execution_regions_total', label: 'Total regions', size: 'count' },
+  ],
   'Execution:2': [{ key: 'execution_dollars', label: 'Dollars this quarter ($)', size: 'money' }],
   'Alignment:2': [
     { key: 'alignment_hours_first', label: 'Hours, first department', size: 'count' },
@@ -132,6 +136,12 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
 const NUMBERS_FIRST: Record<string, string> = {
   'Leadership:1': 'Please identify them.',
 };
+
+// Small written boxes (a name, not a figure). Saved separately from the number boxes.
+const TEXT_FIELDS: Record<string, Array<{ key: string; label: string }>> = {
+  'Execution:1': [{ key: 'execution_pilot_name', label: 'Pilot name' }],
+};
+const FIXED_TEXT_KEYS: string[] = Object.values(TEXT_FIELDS).flatMap((fields) => fields.map((f) => f.key));
 
 const FIXED_NUMBER_KEYS: string[] = Object.values(NUMBER_FIELDS).flatMap((fields) => fields.map((f) => f.key));
 const RESULTS_KEY = 'results_value';
@@ -190,6 +200,7 @@ export default function PreSessionQuestionnaire() {
   const [savedId, setSavedId] = useState<string | null>(null);
   const [token, setToken] = useState('');
   const [numbers, setNumbers] = useState<Record<string, string>>({});
+  const [texts, setTexts] = useState<Record<string, string>>({});
   const [resultBoxes, setResultBoxes] = useState<ResultBox[]>([{ idx: 1, value: '' }]);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -233,9 +244,13 @@ export default function PreSessionQuestionnaire() {
     const numRes = await supabase.rpc('get_presession_numbers', { p_token: token });
     const numData = numRes.data as {
       numbers: Array<{ field_key: string; item_index: number; value: number }>;
+      texts?: Array<{ field_key: string; value: string }>;
       submitted_at: string | null;
     } | null;
     if (!numRes.error && numData) {
+      const loadedTexts: Record<string, string> = {};
+      for (const t of numData.texts ?? []) loadedTexts[t.field_key] = t.value;
+      setTexts(loadedTexts);
       const fixed: Record<string, string> = {};
       const results: ResultBox[] = [];
       for (const n of numData.numbers ?? []) {
@@ -285,6 +300,18 @@ export default function PreSessionQuestionnaire() {
     setNumbers((prev) => ({ ...prev, [fieldKey]: text }));
   }
 
+  const saveText = useCallback(async (fieldKey: string, text: string) => {
+    const { data, error } = await supabase.rpc('save_presession_text', {
+      p_token: token,
+      p_field_key: fieldKey,
+      p_value: text,
+    });
+    if (error || data !== true) return;
+    const savedKey = `text:${fieldKey}`;
+    setSavedId(savedKey);
+    setTimeout(() => setSavedId((cur) => (cur === savedKey ? null : cur)), 1800);
+  }, [token]);
+
   function changeResult(idx: number, text: string) {
     if (!/^[0-9.,]*$/.test(text)) return;
     setResultBoxes((prev) => prev.map((b) => (b.idx === idx ? { ...b, value: text } : b)));
@@ -324,6 +351,11 @@ export default function PreSessionQuestionnaire() {
       const n = parseNumber(numbers[k] ?? '');
       if (n !== null) {
         pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: k, p_item_index: 1, p_value: n }));
+      }
+    }
+    for (const k of FIXED_TEXT_KEYS) {
+      if ((texts[k] ?? '').trim() !== '') {
+        pending.push(supabase.rpc('save_presession_text', { p_token: token, p_field_key: k, p_value: texts[k] }));
       }
     }
     for (const b of resultBoxes) {
@@ -374,8 +406,9 @@ export default function PreSessionQuestionnaire() {
   const hasClear = rows.some((r) => r.diagnostic_questions.framework === 'CLEAR');
   const fixedFilled = FIXED_NUMBER_KEYS.filter((k) => parseNumber(numbers[k] ?? '') !== null).length;
   const resultsFilled = resultBoxes.filter((b) => parseNumber(b.value) !== null).length;
-  const numbersTotal = hasClear ? FIXED_NUMBER_KEYS.length + resultBoxes.length : 0;
-  const numbersFilled = hasClear ? fixedFilled + resultsFilled : 0;
+  const textsFilled = FIXED_TEXT_KEYS.filter((k) => (texts[k] ?? '').trim() !== '').length;
+  const numbersTotal = hasClear ? FIXED_NUMBER_KEYS.length + FIXED_TEXT_KEYS.length + resultBoxes.length : 0;
+  const numbersFilled = hasClear ? fixedFilled + textsFilled + resultsFilled : 0;
   const numbersComplete = !hasClear || numbersFilled === numbersTotal;
   const canSubmit = isComplete && numbersComplete && !submitting;
 
@@ -459,9 +492,29 @@ export default function PreSessionQuestionnaire() {
                           framework === 'CLEAR' && pillar === 'Results' && row.diagnostic_questions.question_order === 2;
                         const numbersFirstLabel =
                           framework === 'CLEAR' ? NUMBERS_FIRST[`${pillar}:${row.diagnostic_questions.question_order}`] : undefined;
+                        const textFields =
+                          framework === 'CLEAR' ? TEXT_FIELDS[`${pillar}:${row.diagnostic_questions.question_order}`] ?? [] : [];
                         const numberBlock =
-                          numberFields.length > 0 ? (
+                          numberFields.length > 0 || textFields.length > 0 ? (
                             <div style={numberRowStyle}>
+                              {textFields.map((f) => (
+                                <div key={f.key} style={{ flex: '0 0 auto', width: 280, maxWidth: '100%' }}>
+                                  <label htmlFor={`txt-${f.key}`} style={numberLabelStyle}>{f.label}</label>
+                                  <input
+                                    id={`txt-${f.key}`}
+                                    type="text"
+                                    autoComplete="off"
+                                    maxLength={200}
+                                    value={texts[f.key] ?? ''}
+                                    onChange={(e) => setTexts((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                                    onBlur={(e) => saveText(f.key, e.target.value)}
+                                    style={numberInputStyle}
+                                  />
+                                  {savedId === `text:${f.key}` && (
+                                    <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                  )}
+                                </div>
+                              ))}
                               {numberFields.map((f) => (
                                 <div key={f.key} style={numberCellStyle(f.size)}>
                                   {f.label && <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>}
