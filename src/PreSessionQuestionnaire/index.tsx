@@ -129,10 +129,6 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
     { key: 'execution_regions_reached', label: 'Teams the pilot serves today', size: 'wide' },
   ],
   'Execution:2': [{ key: 'execution_dollars', label: '', size: 'money', ariaLabel: 'Dollars this quarter' }],
-  'Alignment:2': [
-    { key: 'alignment_hours_first', label: 'Hours, first department', size: 'count' },
-    { key: 'alignment_hours_second', label: 'Hours, second department', size: 'count' },
-  ],
 };
 
 // Questions where the number box comes first and the written box second, with the label shown above the written box.
@@ -150,6 +146,23 @@ const FIXED_NUMBER_KEYS: string[] = Object.values(NUMBER_FIELDS).flatMap((fields
 const RESULTS_KEY = 'results_value';
 const MAX_INITIATIVES = 100;
 
+// Alignment Q2: one row per department (a name and its hours), added one at a time.
+// The first two rows are required; hours save as alignment_hours and names as alignment_department, both by row number.
+const DEPT_NAME_KEY = 'alignment_department';
+const DEPT_HOURS_KEY = 'alignment_hours';
+const MAX_DEPARTMENTS = 100;
+
+interface DeptRow {
+  idx: number;
+  name: string;
+  hours: string;
+}
+
+const emptyDeptRows = (): DeptRow[] => [
+  { idx: 1, name: '', hours: '' },
+  { idx: 2, name: '', hours: '' },
+];
+
 interface ResultBox {
   idx: number;
   value: string;
@@ -163,9 +176,14 @@ function parseNumber(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Clarity Q2 (Dollars, Weeks), Leadership Q2 (three counts) and Execution Q2 (Dollars) are answered by number boxes alone, so they have no written-answer box.
+// Clarity Q2 (Dollars, Weeks), Leadership Q2 (three counts), Execution Q2 (Dollars) and Alignment Q2 (department rows)
+// are answered by their boxes alone, so they have no written-answer box.
 function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
-  return framework === 'CLEAR' && (questionOrder === 2 && (pillar === 'Clarity' || pillar === 'Leadership' || pillar === 'Execution'));
+  return (
+    framework === 'CLEAR' &&
+    questionOrder === 2 &&
+    (pillar === 'Clarity' || pillar === 'Leadership' || pillar === 'Execution' || pillar === 'Alignment')
+  );
 }
 
 interface QuestionRow {
@@ -205,6 +223,7 @@ export default function PreSessionQuestionnaire() {
   const [numbers, setNumbers] = useState<Record<string, string>>({});
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [resultBoxes, setResultBoxes] = useState<ResultBox[]>([{ idx: 1, value: '' }]);
+  const [deptRows, setDeptRows] = useState<DeptRow[]>(emptyDeptRows());
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
@@ -247,21 +266,38 @@ export default function PreSessionQuestionnaire() {
     const numRes = await supabase.rpc('get_presession_numbers', { p_token: token });
     const numData = numRes.data as {
       numbers: Array<{ field_key: string; item_index: number; value: number }>;
-      texts?: Array<{ field_key: string; value: string }>;
+      texts?: Array<{ field_key: string; item_index?: number; value: string }>;
       submitted_at: string | null;
     } | null;
     if (!numRes.error && numData) {
       const loadedTexts: Record<string, string> = {};
-      for (const t of numData.texts ?? []) loadedTexts[t.field_key] = t.value;
+      const deptMap = new Map<number, DeptRow>();
+      const deptAt = (idx: number): DeptRow => {
+        let d = deptMap.get(idx);
+        if (!d) {
+          d = { idx, name: '', hours: '' };
+          deptMap.set(idx, d);
+        }
+        return d;
+      };
+      for (const t of numData.texts ?? []) {
+        if (t.field_key === DEPT_NAME_KEY) deptAt(t.item_index ?? 1).name = t.value;
+        else loadedTexts[t.field_key] = t.value;
+      }
       setTexts(loadedTexts);
       const fixed: Record<string, string> = {};
       const results: ResultBox[] = [];
       for (const n of numData.numbers ?? []) {
         if (n.field_key === RESULTS_KEY) results.push({ idx: n.item_index, value: String(n.value) });
+        else if (n.field_key === DEPT_HOURS_KEY) deptAt(n.item_index).hours = String(n.value);
         else fixed[n.field_key] = String(n.value);
       }
       setNumbers(fixed);
       if (results.length > 0) setResultBoxes(results.sort((a, b) => a.idx - b.idx));
+      // The first two department rows always show, even before anything is saved.
+      deptAt(1);
+      deptAt(2);
+      setDeptRows(Array.from(deptMap.values()).sort((a, b) => a.idx - b.idx));
       setSubmittedAt(numData.submitted_at ?? null);
     }
     setLoading(false);
@@ -315,6 +351,46 @@ export default function PreSessionQuestionnaire() {
     setTimeout(() => setSavedId((cur) => (cur === savedKey ? null : cur)), 1800);
   }, [token]);
 
+  const saveDeptName = useCallback(async (idx: number, text: string) => {
+    const { data, error } = await supabase.rpc('save_presession_text', {
+      p_token: token,
+      p_field_key: DEPT_NAME_KEY,
+      p_value: text,
+      p_item_index: idx,
+    });
+    if (error || data !== true) return;
+    const savedKey = `${DEPT_NAME_KEY}:${idx}`;
+    setSavedId(savedKey);
+    setTimeout(() => setSavedId((cur) => (cur === savedKey ? null : cur)), 1800);
+  }, [token]);
+
+  function changeDeptName(idx: number, text: string) {
+    setDeptRows((prev) => prev.map((d) => (d.idx === idx ? { ...d, name: text } : d)));
+  }
+
+  function changeDeptHours(idx: number, text: string) {
+    if (!/^[0-9.,]*$/.test(text)) return;
+    setDeptRows((prev) => prev.map((d) => (d.idx === idx ? { ...d, hours: text } : d)));
+  }
+
+  function addDepartment() {
+    setDeptRows((prev) => {
+      if (prev.length >= MAX_DEPARTMENTS) return prev;
+      const next = Math.max(...prev.map((d) => d.idx)) + 1;
+      return [...prev, { idx: next, name: '', hours: '' }];
+    });
+  }
+
+  // Removing a row also clears that row's saved name (the database does both together).
+  async function removeDepartment(idx: number) {
+    setDeptRows((prev) => prev.filter((d) => d.idx !== idx));
+    await supabase.rpc('delete_presession_number', {
+      p_token: token,
+      p_field_key: DEPT_HOURS_KEY,
+      p_item_index: idx,
+    });
+  }
+
   function changeResult(idx: number, text: string) {
     if (!/^[0-9.,]*$/.test(text)) return;
     setResultBoxes((prev) => prev.map((b) => (b.idx === idx ? { ...b, value: text } : b)));
@@ -367,6 +443,15 @@ export default function PreSessionQuestionnaire() {
         pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: RESULTS_KEY, p_item_index: b.idx, p_value: n }));
       }
     }
+    for (const d of deptRows) {
+      if (d.name.trim() !== '') {
+        pending.push(supabase.rpc('save_presession_text', { p_token: token, p_field_key: DEPT_NAME_KEY, p_value: d.name, p_item_index: d.idx }));
+      }
+      const n = parseNumber(d.hours);
+      if (n !== null) {
+        pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: DEPT_HOURS_KEY, p_item_index: d.idx, p_value: n }));
+      }
+    }
     await Promise.all(pending);
     const { data, error } = await supabase.rpc('submit_presession', { p_token: token });
     const result = data as { ok: boolean; submitted_at?: string } | null;
@@ -410,8 +495,13 @@ export default function PreSessionQuestionnaire() {
   const fixedFilled = FIXED_NUMBER_KEYS.filter((k) => parseNumber(numbers[k] ?? '') !== null).length;
   const resultsFilled = resultBoxes.filter((b) => parseNumber(b.value) !== null).length;
   const textsFilled = FIXED_TEXT_KEYS.filter((k) => (texts[k] ?? '').trim() !== '').length;
-  const numbersTotal = hasClear ? FIXED_NUMBER_KEYS.length + FIXED_TEXT_KEYS.length + resultBoxes.length : 0;
-  const numbersFilled = hasClear ? fixedFilled + textsFilled + resultsFilled : 0;
+  // Each department row counts twice: its name and its hours.
+  const deptFilled = deptRows.reduce(
+    (sum, d) => sum + (d.name.trim() !== '' ? 1 : 0) + (parseNumber(d.hours) !== null ? 1 : 0),
+    0
+  );
+  const numbersTotal = hasClear ? FIXED_NUMBER_KEYS.length + FIXED_TEXT_KEYS.length + resultBoxes.length + deptRows.length * 2 : 0;
+  const numbersFilled = hasClear ? fixedFilled + textsFilled + resultsFilled + deptFilled : 0;
   const numbersComplete = !hasClear || numbersFilled === numbersTotal;
   const canSubmit = isComplete && numbersComplete && !submitting;
 
@@ -493,6 +583,8 @@ export default function PreSessionQuestionnaire() {
                             : [];
                         const isResultsValueQuestion =
                           framework === 'CLEAR' && pillar === 'Results' && row.diagnostic_questions.question_order === 2;
+                        const isAlignmentDeptQuestion =
+                          framework === 'CLEAR' && pillar === 'Alignment' && row.diagnostic_questions.question_order === 2;
                         const numbersFirstLabel =
                           framework === 'CLEAR' ? NUMBERS_FIRST[`${pillar}:${row.diagnostic_questions.question_order}`] : undefined;
                         const textFields =
@@ -521,6 +613,10 @@ export default function PreSessionQuestionnaire() {
                               {numberFields.map((f) => (
                                 <div key={f.key} style={numberCellStyle(f.size)}>
                                   {f.label && <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>}
+                                  {/* An unlabeled box beside a labeled one gets an invisible label so the boxes sit level. */}
+                                  {!f.label && numberFields.some((x) => x.label) && (
+                                    <div aria-hidden="true" style={{ ...numberLabelStyle, visibility: 'hidden' }}>&nbsp;</div>
+                                  )}
                                   <input
                                     id={`num-${f.key}`}
                                     aria-label={f.label ? undefined : f.ariaLabel}
@@ -572,6 +668,69 @@ export default function PreSessionQuestionnaire() {
                             )}
 
                             {!numbersFirstLabel && numberBlock}
+
+                            {isAlignmentDeptQuestion && (
+                              <div style={{ marginTop: 10 }}>
+                                {deptRows.map((d, pos) => (
+                                  <div key={d.idx} style={{ ...numberRowStyle, marginTop: pos === 0 ? 0 : 12 }}>
+                                    <div style={{ flex: '0 0 auto', width: 280, maxWidth: '100%' }}>
+                                      <label htmlFor={`dept-name-${d.idx}`} style={numberLabelStyle}>
+                                        Department {pos + 1}
+                                      </label>
+                                      <input
+                                        id={`dept-name-${d.idx}`}
+                                        type="text"
+                                        autoComplete="off"
+                                        maxLength={200}
+                                        value={d.name}
+                                        onChange={(e) => changeDeptName(d.idx, e.target.value)}
+                                        onBlur={(e) => saveDeptName(d.idx, e.target.value)}
+                                        style={numberInputStyle}
+                                      />
+                                      {savedId === `${DEPT_NAME_KEY}:${d.idx}` && (
+                                        <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                      )}
+                                    </div>
+                                    <div style={numberCellStyle('count')}>
+                                      <label htmlFor={`dept-hours-${d.idx}`} style={numberLabelStyle}>
+                                        Hours this quarter
+                                      </label>
+                                      <input
+                                        id={`dept-hours-${d.idx}`}
+                                        type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        value={d.hours}
+                                        onChange={(e) => changeDeptHours(d.idx, e.target.value)}
+                                        onBlur={(e) => saveNumber(DEPT_HOURS_KEY, d.idx, e.target.value)}
+                                        style={numberInputStyle}
+                                      />
+                                      {savedId === `${DEPT_HOURS_KEY}:${d.idx}` && (
+                                        <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                      )}
+                                    </div>
+                                    {pos > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeDepartment(d.idx)}
+                                        aria-label={`Remove department ${pos + 1}`}
+                                        style={{ ...removeButtonStyle, alignSelf: 'flex-start', marginTop: 20, height: 42 }}
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={addDepartment}
+                                  disabled={deptRows.length >= MAX_DEPARTMENTS}
+                                  style={addButtonStyle}
+                                >
+                                  Add another department
+                                </button>
+                              </div>
+                            )}
 
                             {isResultsValueQuestion && (
                               <div style={{ marginTop: 10 }}>
@@ -721,7 +880,6 @@ const textareaStyle: React.CSSProperties = {
 const numberRowStyle: React.CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
-  alignItems: 'flex-end', // an unlabeled box sits level with its labeled neighbor
   gap: 14,
   marginTop: 10,
 };
