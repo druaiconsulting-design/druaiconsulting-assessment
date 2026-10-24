@@ -122,7 +122,7 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
     { key: 'leadership_missed_cycles', label: 'Missed cycles', size: 'count' },
   ],
   'Execution:1': [
-    { key: 'execution_regions_reached', label: 'Regions the pilot runs in', size: 'count' },
+    { key: 'execution_regions_reached', label: 'Teams the pilot serves today', size: 'count' },
   ],
   'Execution:2': [{ key: 'execution_dollars', label: 'Dollars this quarter ($)', size: 'money' }],
   'Alignment:2': [
