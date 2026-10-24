@@ -106,7 +106,8 @@ const CLOSING_TEXT: Record<string, string> = {
 interface NumberField {
   key: string;
   label: string;
-  size: 'count' | 'money';
+  size: 'count' | 'money' | 'wide';
+  ariaLabel?: string; // used when the box has no visible label
 }
 
 const NUMBER_FIELDS: Record<string, NumberField[]> = {
@@ -115,16 +116,16 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
     { key: 'clarity_weeks', label: 'Weeks', size: 'count' },
   ],
   // An empty label leaves the box unlabeled on screen; the question above it is the label.
-  'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: '', size: 'count' }],
+  'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: '', size: 'count', ariaLabel: 'Number of leaders' }],
   'Leadership:2': [
     { key: 'leadership_stalled_decisions', label: 'Postponed decisions', size: 'count' },
     { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives', size: 'count' },
     { key: 'leadership_missed_cycles', label: 'Missed cycles', size: 'count' },
   ],
   'Execution:1': [
-    { key: 'execution_regions_reached', label: 'Teams the pilot serves today', size: 'count' },
+    { key: 'execution_regions_reached', label: 'Teams the pilot serves today', size: 'wide' },
   ],
-  'Execution:2': [{ key: 'execution_dollars', label: 'Dollars this quarter ($)', size: 'money' }],
+  'Execution:2': [{ key: 'execution_dollars', label: '', size: 'money', ariaLabel: 'Dollars this quarter' }],
   'Alignment:2': [
     { key: 'alignment_hours_first', label: 'Hours, first department', size: 'count' },
     { key: 'alignment_hours_second', label: 'Hours, second department', size: 'count' },
@@ -519,7 +520,7 @@ export default function PreSessionQuestionnaire() {
                                   {f.label && <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>}
                                   <input
                                     id={`num-${f.key}`}
-                                    aria-label={f.label ? undefined : 'Number of leaders'}
+                                    aria-label={f.label ? undefined : f.ariaLabel}
                                     type="text"
                                     inputMode="decimal"
                                     autoComplete="off"
@@ -722,9 +723,9 @@ const numberRowStyle: React.CSSProperties = {
 };
 
 // Boxes are sized to the answer they hold: short for counts, wider for dollar amounts.
-const numberCellStyle = (size: 'count' | 'money'): React.CSSProperties => ({
+const numberCellStyle = (size: 'count' | 'money' | 'wide'): React.CSSProperties => ({
   flex: '0 0 auto',
-  width: size === 'money' ? 190 : 130,
+  width: size === 'wide' ? 220 : size === 'money' ? 190 : 130,
   maxWidth: '100%',
 });
 
