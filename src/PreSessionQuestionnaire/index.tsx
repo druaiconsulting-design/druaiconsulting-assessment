@@ -114,10 +114,8 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
     { key: 'clarity_dollars', label: 'Dollars ($)', size: 'money' },
     { key: 'clarity_weeks', label: 'Weeks', size: 'count' },
   ],
-  'Leadership:1': [
-    { key: 'leadership_leaders_succeeded', label: 'How many?', size: 'count' },
-    { key: 'leadership_leaders_total', label: 'Out of how many leaders?', size: 'count' },
-  ],
+  // An empty label leaves the box unlabeled on screen; the question above it is the label.
+  'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: '', size: 'count' }],
   'Leadership:2': [
     { key: 'leadership_stalled_decisions', label: 'Stalled decisions', size: 'count' },
     { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives', size: 'count' },
@@ -132,7 +130,7 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
 
 // Questions where the number box comes first and the written box second, with the label shown above the written box.
 const NUMBERS_FIRST: Record<string, string> = {
-  'Leadership:1': 'Name them?',
+  'Leadership:1': 'Please identify them.',
 };
 
 const FIXED_NUMBER_KEYS: string[] = Object.values(NUMBER_FIELDS).flatMap((fields) => fields.map((f) => f.key));
@@ -152,9 +150,9 @@ function parseNumber(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Clarity Q2 is answered by its Dollars and Weeks boxes alone, so it has no written-answer box.
+// Clarity Q2 (Dollars, Weeks) and Leadership Q2 (three counts) are answered by number boxes alone, so they have no written-answer box.
 function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
-  return framework === 'CLEAR' && pillar === 'Clarity' && questionOrder === 2;
+  return framework === 'CLEAR' && ((pillar === 'Clarity' && questionOrder === 2) || (pillar === 'Leadership' && questionOrder === 2));
 }
 
 interface QuestionRow {
@@ -466,9 +464,10 @@ export default function PreSessionQuestionnaire() {
                             <div style={numberRowStyle}>
                               {numberFields.map((f) => (
                                 <div key={f.key} style={numberCellStyle(f.size)}>
-                                  <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>
+                                  {f.label && <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>}
                                   <input
                                     id={`num-${f.key}`}
+                                    aria-label={f.label ? undefined : 'Number of leaders'}
                                     type="text"
                                     inputMode="decimal"
                                     autoComplete="off"
