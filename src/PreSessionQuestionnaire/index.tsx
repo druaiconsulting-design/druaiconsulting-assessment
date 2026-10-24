@@ -116,7 +116,10 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
     { key: 'clarity_weeks', label: 'Weeks', size: 'count' },
   ],
   // An empty label leaves the box unlabeled on screen; the question above it is the label.
-  'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: '', size: 'count', ariaLabel: 'Number of leaders' }],
+  'Leadership:1': [
+    { key: 'leadership_leaders_succeeded', label: '', size: 'count', ariaLabel: 'Number of leaders who can do this' },
+    { key: 'leadership_leaders_total', label: 'Total leaders on the team', size: 'wide' },
+  ],
   'Leadership:2': [
     { key: 'leadership_stalled_decisions', label: 'Postponed decisions', size: 'count' },
     { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives', size: 'count' },
@@ -718,6 +721,7 @@ const textareaStyle: React.CSSProperties = {
 const numberRowStyle: React.CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
+  alignItems: 'flex-end', // an unlabeled box sits level with its labeled neighbor
   gap: 14,
   marginTop: 10,
 };
