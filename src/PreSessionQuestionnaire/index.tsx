@@ -159,9 +159,9 @@ function parseNumber(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Clarity Q2 (Dollars, Weeks) and Leadership Q2 (three counts) are answered by number boxes alone, so they have no written-answer box.
+// Clarity Q2 (Dollars, Weeks), Leadership Q2 (three counts) and Execution Q2 (Dollars) are answered by number boxes alone, so they have no written-answer box.
 function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
-  return framework === 'CLEAR' && ((pillar === 'Clarity' && questionOrder === 2) || (pillar === 'Leadership' && questionOrder === 2));
+  return framework === 'CLEAR' && (questionOrder === 2 && (pillar === 'Clarity' || pillar === 'Leadership' || pillar === 'Execution'));
 }
 
 interface QuestionRow {
