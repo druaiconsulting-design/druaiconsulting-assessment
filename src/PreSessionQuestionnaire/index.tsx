@@ -123,7 +123,6 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
   ],
   'Execution:1': [
     { key: 'execution_regions_reached', label: 'Regions the pilot runs in', size: 'count' },
-    { key: 'execution_regions_total', label: 'Total regions', size: 'count' },
   ],
   'Execution:2': [{ key: 'execution_dollars', label: 'Dollars this quarter ($)', size: 'money' }],
   'Alignment:2': [
