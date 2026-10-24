@@ -114,7 +114,10 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
     { key: 'clarity_dollars', label: 'Dollars ($)', size: 'money' },
     { key: 'clarity_weeks', label: 'Weeks', size: 'count' },
   ],
-  'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: 'How many?', size: 'count' }],
+  'Leadership:1': [
+    { key: 'leadership_leaders_succeeded', label: 'How many?', size: 'count' },
+    { key: 'leadership_leaders_total', label: 'Out of how many leaders?', size: 'count' },
+  ],
   'Leadership:2': [
     { key: 'leadership_stalled_decisions', label: 'Stalled decisions', size: 'count' },
     { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives', size: 'count' },
