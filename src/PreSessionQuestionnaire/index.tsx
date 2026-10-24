@@ -163,8 +163,12 @@ const emptyDeptRows = (): DeptRow[] => [
   { idx: 2, name: '', hours: '' },
 ];
 
+// Results Q2: one row per initiative (a name and its dollar value), added one at a time. The first row is required.
+const RESULTS_NAME_KEY = 'results_initiative';
+
 interface ResultBox {
   idx: number;
+  name: string;
   value: string;
 }
 
@@ -176,13 +180,13 @@ function parseNumber(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Clarity Q2 (Dollars, Weeks), Leadership Q2 (three counts), Execution Q2 (Dollars) and Alignment Q2 (department rows)
-// are answered by their boxes alone, so they have no written-answer box.
+// Clarity Q2 (Dollars, Weeks), Leadership Q2 (three counts), Execution Q2 (Dollars), Alignment Q2 (department rows)
+// and Results Q2 (initiative rows) are answered by their boxes alone, so they have no written-answer box.
 function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
   return (
     framework === 'CLEAR' &&
     questionOrder === 2 &&
-    (pillar === 'Clarity' || pillar === 'Leadership' || pillar === 'Execution' || pillar === 'Alignment')
+    (pillar === 'Clarity' || pillar === 'Leadership' || pillar === 'Execution' || pillar === 'Alignment' || pillar === 'Results')
   );
 }
 
@@ -222,7 +226,7 @@ export default function PreSessionQuestionnaire() {
   const [token, setToken] = useState('');
   const [numbers, setNumbers] = useState<Record<string, string>>({});
   const [texts, setTexts] = useState<Record<string, string>>({});
-  const [resultBoxes, setResultBoxes] = useState<ResultBox[]>([{ idx: 1, value: '' }]);
+  const [resultBoxes, setResultBoxes] = useState<ResultBox[]>([{ idx: 1, name: '', value: '' }]);
   const [deptRows, setDeptRows] = useState<DeptRow[]>(emptyDeptRows());
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -280,20 +284,31 @@ export default function PreSessionQuestionnaire() {
         }
         return d;
       };
+      const resultMap = new Map<number, ResultBox>();
+      const resultAt = (idx: number): ResultBox => {
+        let r = resultMap.get(idx);
+        if (!r) {
+          r = { idx, name: '', value: '' };
+          resultMap.set(idx, r);
+        }
+        return r;
+      };
       for (const t of numData.texts ?? []) {
         if (t.field_key === DEPT_NAME_KEY) deptAt(t.item_index ?? 1).name = t.value;
+        else if (t.field_key === RESULTS_NAME_KEY) resultAt(t.item_index ?? 1).name = t.value;
         else loadedTexts[t.field_key] = t.value;
       }
       setTexts(loadedTexts);
       const fixed: Record<string, string> = {};
-      const results: ResultBox[] = [];
       for (const n of numData.numbers ?? []) {
-        if (n.field_key === RESULTS_KEY) results.push({ idx: n.item_index, value: String(n.value) });
+        if (n.field_key === RESULTS_KEY) resultAt(n.item_index).value = String(n.value);
         else if (n.field_key === DEPT_HOURS_KEY) deptAt(n.item_index).hours = String(n.value);
         else fixed[n.field_key] = String(n.value);
       }
       setNumbers(fixed);
-      if (results.length > 0) setResultBoxes(results.sort((a, b) => a.idx - b.idx));
+      // The first initiative row always shows, even before anything is saved.
+      resultAt(1);
+      setResultBoxes(Array.from(resultMap.values()).sort((a, b) => a.idx - b.idx));
       // The first two department rows always show, even before anything is saved.
       deptAt(1);
       deptAt(2);
@@ -400,9 +415,26 @@ export default function PreSessionQuestionnaire() {
     setResultBoxes((prev) => {
       if (prev.length >= MAX_INITIATIVES) return prev;
       const next = Math.max(...prev.map((b) => b.idx)) + 1;
-      return [...prev, { idx: next, value: '' }];
+      return [...prev, { idx: next, name: '', value: '' }];
     });
   }
+
+  function changeResultName(idx: number, text: string) {
+    setResultBoxes((prev) => prev.map((b) => (b.idx === idx ? { ...b, name: text } : b)));
+  }
+
+  const saveResultName = useCallback(async (idx: number, text: string) => {
+    const { data, error } = await supabase.rpc('save_presession_text', {
+      p_token: token,
+      p_field_key: RESULTS_NAME_KEY,
+      p_value: text,
+      p_item_index: idx,
+    });
+    if (error || data !== true) return;
+    const savedKey = `${RESULTS_NAME_KEY}:${idx}`;
+    setSavedId(savedKey);
+    setTimeout(() => setSavedId((cur) => (cur === savedKey ? null : cur)), 1800);
+  }, [token]);
 
   async function removeInitiative(idx: number) {
     setResultBoxes((prev) => prev.filter((b) => b.idx !== idx));
@@ -438,6 +470,9 @@ export default function PreSessionQuestionnaire() {
       }
     }
     for (const b of resultBoxes) {
+      if (b.name.trim() !== '') {
+        pending.push(supabase.rpc('save_presession_text', { p_token: token, p_field_key: RESULTS_NAME_KEY, p_value: b.name, p_item_index: b.idx }));
+      }
       const n = parseNumber(b.value);
       if (n !== null) {
         pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: RESULTS_KEY, p_item_index: b.idx, p_value: n }));
@@ -493,14 +528,18 @@ export default function PreSessionQuestionnaire() {
 
   const hasClear = rows.some((r) => r.diagnostic_questions.framework === 'CLEAR');
   const fixedFilled = FIXED_NUMBER_KEYS.filter((k) => parseNumber(numbers[k] ?? '') !== null).length;
-  const resultsFilled = resultBoxes.filter((b) => parseNumber(b.value) !== null).length;
+  // Each initiative row counts twice: its name and its value.
+  const resultsFilled = resultBoxes.reduce(
+    (sum, b) => sum + (b.name.trim() !== '' ? 1 : 0) + (parseNumber(b.value) !== null ? 1 : 0),
+    0
+  );
   const textsFilled = FIXED_TEXT_KEYS.filter((k) => (texts[k] ?? '').trim() !== '').length;
   // Each department row counts twice: its name and its hours.
   const deptFilled = deptRows.reduce(
     (sum, d) => sum + (d.name.trim() !== '' ? 1 : 0) + (parseNumber(d.hours) !== null ? 1 : 0),
     0
   );
-  const numbersTotal = hasClear ? FIXED_NUMBER_KEYS.length + FIXED_TEXT_KEYS.length + resultBoxes.length + deptRows.length * 2 : 0;
+  const numbersTotal = hasClear ? FIXED_NUMBER_KEYS.length + FIXED_TEXT_KEYS.length + resultBoxes.length * 2 + deptRows.length * 2 : 0;
   const numbersFilled = hasClear ? fixedFilled + textsFilled + resultsFilled + deptFilled : 0;
   const numbersComplete = !hasClear || numbersFilled === numbersTotal;
   const canSubmit = isComplete && numbersComplete && !submitting;
@@ -734,40 +773,56 @@ export default function PreSessionQuestionnaire() {
 
                             {isResultsValueQuestion && (
                               <div style={{ marginTop: 10 }}>
-                                <div style={numberRowStyle}>
-                                  {resultBoxes.map((b, pos) => (
-                                    <div key={b.idx} style={numberCellStyle('money')}>
-                                      <label htmlFor={`num-results-${b.idx}`} style={numberLabelStyle}>
-                                        Initiative {pos + 1} value ($)
+                                {resultBoxes.map((b, pos) => (
+                                  <div key={b.idx} style={{ ...numberRowStyle, marginTop: pos === 0 ? 0 : 12 }}>
+                                    <div style={{ flex: '0 0 auto', width: 280, maxWidth: '100%' }}>
+                                      <label htmlFor={`results-name-${b.idx}`} style={numberLabelStyle}>
+                                        Initiative {pos + 1}
                                       </label>
-                                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                        <input
-                                          id={`num-results-${b.idx}`}
-                                          type="text"
-                                          inputMode="decimal"
-                                          autoComplete="off"
-                                          value={b.value}
-                                          onChange={(e) => changeResult(b.idx, e.target.value)}
-                                          onBlur={(e) => saveNumber(RESULTS_KEY, b.idx, e.target.value)}
-                                          style={numberInputStyle}
-                                        />
-                                        {pos > 0 && (
-                                          <button
-                                            type="button"
-                                            onClick={() => removeInitiative(b.idx)}
-                                            aria-label={`Remove initiative ${pos + 1}`}
-                                            style={removeButtonStyle}
-                                          >
-                                            Remove
-                                          </button>
-                                        )}
-                                      </div>
+                                      <input
+                                        id={`results-name-${b.idx}`}
+                                        type="text"
+                                        autoComplete="off"
+                                        maxLength={200}
+                                        value={b.name}
+                                        onChange={(e) => changeResultName(b.idx, e.target.value)}
+                                        onBlur={(e) => saveResultName(b.idx, e.target.value)}
+                                        style={numberInputStyle}
+                                      />
+                                      {savedId === `${RESULTS_NAME_KEY}:${b.idx}` && (
+                                        <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                      )}
+                                    </div>
+                                    <div style={numberCellStyle('money')}>
+                                      <label htmlFor={`num-results-${b.idx}`} style={numberLabelStyle}>
+                                        Value ($)
+                                      </label>
+                                      <input
+                                        id={`num-results-${b.idx}`}
+                                        type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        value={b.value}
+                                        onChange={(e) => changeResult(b.idx, e.target.value)}
+                                        onBlur={(e) => saveNumber(RESULTS_KEY, b.idx, e.target.value)}
+                                        style={numberInputStyle}
+                                      />
                                       {savedId === `${RESULTS_KEY}:${b.idx}` && (
                                         <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
                                       )}
                                     </div>
-                                  ))}
-                                </div>
+                                    {pos > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeInitiative(b.idx)}
+                                        aria-label={`Remove initiative ${pos + 1}`}
+                                        style={{ ...removeButtonStyle, alignSelf: 'flex-start', marginTop: 20, height: 42 }}
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
                                 <button
                                   type="button"
                                   onClick={addInitiative}
