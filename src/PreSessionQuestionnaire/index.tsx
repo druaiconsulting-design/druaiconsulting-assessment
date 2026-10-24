@@ -102,27 +102,34 @@ const CLOSING_TEXT: Record<string, string> = {
 // ── Number boxes: one set under each CLEAR question that asks for figures ─────
 // Each box saves under its field key. The Results question asks for the value of
 // each initiative, so its boxes are added one at a time (results_value, index 1+).
+// size: 'count' for small whole numbers (leaders, weeks, hours, decisions), 'money' for dollar amounts.
 interface NumberField {
   key: string;
   label: string;
+  size: 'count' | 'money';
 }
 
 const NUMBER_FIELDS: Record<string, NumberField[]> = {
   'Clarity:2': [
-    { key: 'clarity_dollars', label: 'Dollars ($)' },
-    { key: 'clarity_weeks', label: 'Weeks' },
+    { key: 'clarity_dollars', label: 'Dollars ($)', size: 'money' },
+    { key: 'clarity_weeks', label: 'Weeks', size: 'count' },
   ],
-  'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: 'Leaders who succeeded' }],
+  'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: 'How many?', size: 'count' }],
   'Leadership:2': [
-    { key: 'leadership_stalled_decisions', label: 'Stalled decisions' },
-    { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives' },
-    { key: 'leadership_missed_cycles', label: 'Missed cycles' },
+    { key: 'leadership_stalled_decisions', label: 'Stalled decisions', size: 'count' },
+    { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives', size: 'count' },
+    { key: 'leadership_missed_cycles', label: 'Missed cycles', size: 'count' },
   ],
-  'Execution:2': [{ key: 'execution_dollars', label: 'Dollars this quarter ($)' }],
+  'Execution:2': [{ key: 'execution_dollars', label: 'Dollars this quarter ($)', size: 'money' }],
   'Alignment:2': [
-    { key: 'alignment_hours_first', label: 'Hours, first department' },
-    { key: 'alignment_hours_second', label: 'Hours, second department' },
+    { key: 'alignment_hours_first', label: 'Hours, first department', size: 'count' },
+    { key: 'alignment_hours_second', label: 'Hours, second department', size: 'count' },
   ],
+};
+
+// Questions where the number box comes first and the written box second, with the label shown above the written box.
+const NUMBERS_FIRST: Record<string, string> = {
+  'Leadership:1': 'Name them?',
 };
 
 const FIXED_NUMBER_KEYS: string[] = Object.values(NUMBER_FIELDS).flatMap((fields) => fields.map((f) => f.key));
@@ -449,6 +456,31 @@ export default function PreSessionQuestionnaire() {
                             : [];
                         const isResultsValueQuestion =
                           framework === 'CLEAR' && pillar === 'Results' && row.diagnostic_questions.question_order === 2;
+                        const numbersFirstLabel =
+                          framework === 'CLEAR' ? NUMBERS_FIRST[`${pillar}:${row.diagnostic_questions.question_order}`] : undefined;
+                        const numberBlock =
+                          numberFields.length > 0 ? (
+                            <div style={numberRowStyle}>
+                              {numberFields.map((f) => (
+                                <div key={f.key} style={numberCellStyle(f.size)}>
+                                  <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>
+                                  <input
+                                    id={`num-${f.key}`}
+                                    type="text"
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    value={numbers[f.key] ?? ''}
+                                    onChange={(e) => changeNumber(f.key, e.target.value)}
+                                    onBlur={(e) => saveNumber(f.key, 1, e.target.value)}
+                                    style={numberInputStyle}
+                                  />
+                                  {savedId === `${f.key}:1` && (
+                                    <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null;
 
                         return (
                           <div key={row.id} style={{ marginBottom: 16 }}>
@@ -456,13 +488,23 @@ export default function PreSessionQuestionnaire() {
                               {framework === 'CLEAR' ? `${idx + 1}. ` : ''}
                               {row.diagnostic_questions.question_text}
                             </label>
+                            {numbersFirstLabel && numberBlock}
                             {!isNumbersOnlyQuestion(framework, pillar, row.diagnostic_questions.question_order) && (
                               <>
+                                {numbersFirstLabel && (
+                                  <label
+                                    htmlFor={`text-${row.id}`}
+                                    style={{ display: 'block', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, margin: '14px 0 4px 0' }}
+                                  >
+                                    {numbersFirstLabel}
+                                  </label>
+                                )}
                                 <textarea
+                                  id={`text-${row.id}`}
                                   defaultValue={row.answer_text ?? ''}
                                   onChange={(e) => updateLocalAnswer(row.id, e.target.value)}
                                   onBlur={(e) => saveAnswer(row.id, e.target.value)}
-                                  rows={3}
+                                  rows={numbersFirstLabel ? 2 : 3}
                                   style={textareaStyle}
                                 />
                                 {savedId === row.id && (
@@ -471,34 +513,13 @@ export default function PreSessionQuestionnaire() {
                               </>
                             )}
 
-                            {numberFields.length > 0 && (
-                              <div style={numberRowStyle}>
-                                {numberFields.map((f) => (
-                                  <div key={f.key} style={numberCellStyle}>
-                                    <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>
-                                    <input
-                                      id={`num-${f.key}`}
-                                      type="text"
-                                      inputMode="decimal"
-                                      autoComplete="off"
-                                      value={numbers[f.key] ?? ''}
-                                      onChange={(e) => changeNumber(f.key, e.target.value)}
-                                      onBlur={(e) => saveNumber(f.key, 1, e.target.value)}
-                                      style={numberInputStyle}
-                                    />
-                                    {savedId === `${f.key}:1` && (
-                                      <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            {!numbersFirstLabel && numberBlock}
 
                             {isResultsValueQuestion && (
                               <div style={{ marginTop: 10 }}>
                                 <div style={numberRowStyle}>
                                   {resultBoxes.map((b, pos) => (
-                                    <div key={b.idx} style={numberCellStyle}>
+                                    <div key={b.idx} style={numberCellStyle('money')}>
                                       <label htmlFor={`num-results-${b.idx}`} style={numberLabelStyle}>
                                         Initiative {pos + 1} value ($)
                                       </label>
@@ -646,10 +667,12 @@ const numberRowStyle: React.CSSProperties = {
   marginTop: 10,
 };
 
-const numberCellStyle: React.CSSProperties = {
-  flex: '1 1 180px',
-  minWidth: 160,
-};
+// Boxes are sized to the answer they hold: short for counts, wider for dollar amounts.
+const numberCellStyle = (size: 'count' | 'money'): React.CSSProperties => ({
+  flex: '0 0 auto',
+  width: size === 'money' ? 190 : 130,
+  maxWidth: '100%',
+});
 
 const numberLabelStyle: React.CSSProperties = {
   display: 'block',
