@@ -117,7 +117,7 @@ const NUMBER_FIELDS: Record<string, NumberField[]> = {
   // An empty label leaves the box unlabeled on screen; the question above it is the label.
   'Leadership:1': [{ key: 'leadership_leaders_succeeded', label: '', size: 'count' }],
   'Leadership:2': [
-    { key: 'leadership_stalled_decisions', label: 'Stalled decisions', size: 'count' },
+    { key: 'leadership_stalled_decisions', label: 'Postponed decisions', size: 'count' },
     { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives', size: 'count' },
     { key: 'leadership_missed_cycles', label: 'Missed cycles', size: 'count' },
   ],
