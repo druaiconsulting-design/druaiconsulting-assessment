@@ -813,14 +813,6 @@ export default function PreSessionQuestionnaire() {
           </div>
         )}
 
-        {isComplete && numbersComplete && (
-          <div style={{ textAlign: 'center', padding: 24, border: `1px solid ${GOLD}`, borderRadius: 4, marginBottom: 24 }}>
-            <p style={{ margin: 0, color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 15 }}>
-              Complete — every question has an answer on file. See you on the call.
-            </p>
-          </div>
-        )}
-
         {/* Submit */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <button
@@ -845,6 +837,14 @@ export default function PreSessionQuestionnaire() {
             <div style={{ color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>{submitNote}</div>
           )}
         </div>
+
+        {submittedAt && (
+          <div style={{ textAlign: 'center', padding: 24, border: `1px solid ${GOLD}`, borderRadius: 4, marginBottom: 24 }}>
+            <p style={{ margin: 0, color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 15 }}>
+              Complete — every question has an answer on file. See you on the call.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
