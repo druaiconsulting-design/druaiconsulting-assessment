@@ -464,9 +464,11 @@ export default function PreSessionQuestionnaire() {
     }
     await Promise.all(pending);
     const { data, error } = await supabase.rpc('submit_presession', { p_token: token });
-    const result = data as { ok: boolean; submitted_at?: string } | null;
+    const result = data as { ok: boolean; reason?: string; submitted_at?: string } | null;
     if (!error && result?.ok) {
       setSubmittedAt(result.submitted_at ?? new Date().toISOString());
+    } else if (!error && result?.reason === 'already_submitted') {
+      await load(token);
     } else {
       setSubmitNote('Some answers or numbers are not saved yet. Click out of each box once, then submit again.');
     }
@@ -514,6 +516,8 @@ export default function PreSessionQuestionnaire() {
   const numbersFilled = hasClear ? fixedFilled + textsFilled + resultsFilled + deptFilled : 0;
   const numbersComplete = !hasClear || numbersFilled === numbersTotal;
   const canSubmit = isComplete && numbersComplete && !submitting;
+  // Once submitted the questionnaire is read-only; the database refuses further saves too.
+  const locked = submittedAt !== null;
 
   const frameworksPresent = FRAMEWORK_ORDER.filter((fw) => rows.some((r) => r.diagnostic_questions.framework === fw));
 
@@ -535,6 +539,7 @@ export default function PreSessionQuestionnaire() {
           </div>
         )}
 
+        <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         {frameworksPresent.map((framework) => {
           const pillars = PILLAR_ORDER[framework].filter((p) =>
             rows.some((r) => r.diagnostic_questions.framework === framework && r.diagnostic_questions.pillar === p)
@@ -719,7 +724,7 @@ export default function PreSessionQuestionnaire() {
                                         <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
                                       )}
                                     </div>
-                                    {pos > 1 && (
+                                    {!locked && pos > 1 && (
                                       <button
                                         type="button"
                                         onClick={() => removeDepartment(d.idx)}
@@ -731,6 +736,7 @@ export default function PreSessionQuestionnaire() {
                                     )}
                                   </div>
                                 ))}
+                                {!locked && (
                                 <button
                                   type="button"
                                   onClick={addDepartment}
@@ -739,6 +745,7 @@ export default function PreSessionQuestionnaire() {
                                 >
                                   Add another department
                                 </button>
+                                )}
                               </div>
                             )}
 
@@ -764,7 +771,7 @@ export default function PreSessionQuestionnaire() {
                                         <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
                                       )}
                                     </div>
-                                    {pos > 0 && (
+                                    {!locked && pos > 0 && (
                                       <button
                                         type="button"
                                         onClick={() => removeInitiative(b.idx)}
@@ -776,6 +783,7 @@ export default function PreSessionQuestionnaire() {
                                     )}
                                   </div>
                                 ))}
+                                {!locked && (
                                 <button
                                   type="button"
                                   onClick={addInitiative}
@@ -784,6 +792,7 @@ export default function PreSessionQuestionnaire() {
                                 >
                                   Add another initiative
                                 </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -796,6 +805,7 @@ export default function PreSessionQuestionnaire() {
             </div>
           );
         })}
+        </fieldset>
 
         {/* Closing */}
         {diagnosticTier && (
@@ -815,15 +825,17 @@ export default function PreSessionQuestionnaire() {
 
         {/* Submit */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            style={{ ...submitButtonStyle, opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'not-allowed' }}
-          >
-            Submit
-          </button>
-          {!canSubmit && (
+          {!locked && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              style={{ ...submitButtonStyle, opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'not-allowed' }}
+            >
+              Submit
+            </button>
+          )}
+          {!locked && !canSubmit && (
             <div style={{ color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>
               {answeredCount + numbersFilled} of {totalCount + numbersTotal} answered
             </div>
