@@ -853,7 +853,7 @@ export default function PreSessionQuestionnaire() {
         {submittedAt && (
           <div style={{ textAlign: 'center', padding: 24, border: `1px solid ${GOLD}`, borderRadius: 4, marginBottom: 24 }}>
             <p style={{ margin: 0, color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 15 }}>
-              Complete — every question has an answer on file. See you on the call.
+              Completed; all responses are on file. We look forward to providing value during the call.
             </p>
           </div>
         )}
