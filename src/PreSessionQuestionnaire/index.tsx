@@ -844,6 +844,10 @@ export default function PreSessionQuestionnaire() {
           {submitNote && (
             <div style={{ color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>{submitNote}</div>
           )}
+          {/* Testing only: shows which build this screen is running. Removed when testing is done. */}
+          <div style={{ color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 11, marginTop: 18, opacity: 0.6 }}>
+            Build {__BUILD_ID__}
+          </div>
         </div>
       </div>
     </div>
