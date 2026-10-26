@@ -463,7 +463,10 @@ export default function PreSessionQuestionnaire() {
       }
     }
     await Promise.all(pending);
-    const { data, error } = await supabase.rpc('submit_presession', { p_token: token });
+    // The client's own time zone, read from their browser, so the report date is the day it was where they sit.
+    let browserTz: string | null = null;
+    try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { browserTz = null; }
+    const { data, error } = await supabase.rpc('submit_presession', { p_token: token, p_timezone: browserTz });
     const result = data as { ok: boolean; reason?: string; submitted_at?: string } | null;
     if (!error && result?.ok) {
       setSubmittedAt(result.submitted_at ?? new Date().toISOString());
