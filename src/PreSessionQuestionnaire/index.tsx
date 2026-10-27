@@ -529,7 +529,7 @@ export default function PreSessionQuestionnaire() {
       <div style={{ maxWidth: 720, margin: '0 auto', width: '100%' }}>
         {/* Header */}
         <div style={{ marginBottom: 8, color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 13, letterSpacing: 1 }}>
-          {answeredCount} of {totalCount} answered
+          {answeredCount + numbersFilled} of {totalCount + numbersTotal} answered
         </div>
         <h1 style={{ ...headingStyle, fontSize: 32, marginBottom: 4 }}>
           {diagnosticTier === 'executive' ? 'Executive Diagnostic' : 'Strategic Diagnostic'} Pre-Session Questionnaire
