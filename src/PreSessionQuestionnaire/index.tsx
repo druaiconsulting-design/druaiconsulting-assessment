@@ -99,6 +99,93 @@ const CLOSING_TEXT: Record<string, string> = {
     'Insight delineates four distinct frameworks: DRU CLEAR™, 5D Leadership™, 5C Cultural DNA™, and AI Sales Mastery™. The DRU AI Transformation Pathway™ integrally advances all four frameworks through a comprehensive Full Ecosystem sequence spanning ninety days: Discover, Diagnose, Design, Deploy, and Dominate. This process includes twelve sessions, with each stage systematically building on the previous one. Kindly specify the framework designated to commence the sequence.',
 };
 
+// ── Number boxes: one set under each CLEAR question that asks for figures ─────
+// Each box saves under its field key. The Results question asks for the value of
+// each initiative, so its boxes are added one at a time (results_value, index 1+).
+// size: 'count' for small whole numbers (leaders, weeks, hours, decisions), 'money' for dollar amounts.
+interface NumberField {
+  key: string;
+  label: string;
+  size: 'count' | 'money' | 'wide';
+  ariaLabel?: string; // used when the box has no visible label
+}
+
+const NUMBER_FIELDS: Record<string, NumberField[]> = {
+  'Clarity:2': [
+    { key: 'clarity_dollars', label: 'Dollars ($)', size: 'money' },
+    { key: 'clarity_weeks', label: 'Weeks', size: 'count' },
+  ],
+  // An empty label leaves the box unlabeled on screen; the question above it is the label.
+  'Leadership:1': [
+    { key: 'leadership_leaders_succeeded', label: '', size: 'count', ariaLabel: 'Number of leaders who can do this' },
+    { key: 'leadership_leaders_total', label: 'Total leaders on the team', size: 'wide' },
+  ],
+  'Leadership:2': [
+    { key: 'leadership_stalled_decisions', label: 'Postponed decisions', size: 'count' },
+    { key: 'leadership_delayed_initiatives', label: 'Delayed initiatives', size: 'count' },
+    { key: 'leadership_missed_cycles', label: 'Missed cycles', size: 'count' },
+  ],
+  'Execution:1': [
+    { key: 'execution_regions_reached', label: 'Teams the pilot serves today', size: 'wide' },
+  ],
+  'Execution:2': [{ key: 'execution_dollars', label: '', size: 'money', ariaLabel: 'Dollars this quarter' }],
+};
+
+// Questions where the number box comes first and the written box second, with the label shown above the written box.
+const NUMBERS_FIRST: Record<string, string> = {
+  'Leadership:1': 'Please identify them.',
+};
+
+// Small written boxes (a name, not a figure). Saved separately from the number boxes.
+const TEXT_FIELDS: Record<string, Array<{ key: string; label: string }>> = {
+  'Execution:1': [{ key: 'execution_pilot_name', label: 'Pilot name' }],
+};
+const FIXED_TEXT_KEYS: string[] = Object.values(TEXT_FIELDS).flatMap((fields) => fields.map((f) => f.key));
+
+const FIXED_NUMBER_KEYS: string[] = Object.values(NUMBER_FIELDS).flatMap((fields) => fields.map((f) => f.key));
+const RESULTS_KEY = 'results_value';
+const MAX_INITIATIVES = 100;
+
+// Alignment Q2: one row per department (a name and its hours), added one at a time.
+// The first two rows are required; hours save as alignment_hours and names as alignment_department, both by row number.
+const DEPT_NAME_KEY = 'alignment_department';
+const DEPT_HOURS_KEY = 'alignment_hours';
+const MAX_DEPARTMENTS = 100;
+
+interface DeptRow {
+  idx: number;
+  name: string;
+  hours: string;
+}
+
+const emptyDeptRows = (): DeptRow[] => [
+  { idx: 1, name: '', hours: '' },
+  { idx: 2, name: '', hours: '' },
+];
+
+interface ResultBox {
+  idx: number;
+  value: string;
+}
+
+// Digits, commas and one decimal point; 0 counts as a figure.
+function parseNumber(text: string): number | null {
+  const t = (text ?? '').replace(/,/g, '').trim();
+  if (!/^\d+(\.\d+)?$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Clarity Q2 (Dollars, Weeks), Leadership Q2 (three counts), Execution Q2 (Dollars), Alignment Q2 (department rows)
+// and Results Q2 (initiative rows) are answered by their boxes alone, so they have no written-answer box.
+function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
+  return (
+    framework === 'CLEAR' &&
+    questionOrder === 2 &&
+    (pillar === 'Clarity' || pillar === 'Leadership' || pillar === 'Execution' || pillar === 'Alignment' || pillar === 'Results')
+  );
+}
+
 interface QuestionRow {
   id: string;
   question_id: string;
@@ -133,6 +220,13 @@ export default function PreSessionQuestionnaire() {
   const [submission, setSubmission] = useState<SubmissionRow | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [token, setToken] = useState('');
+  const [numbers, setNumbers] = useState<Record<string, string>>({});
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  const [resultBoxes, setResultBoxes] = useState<ResultBox[]>([{ idx: 1, value: '' }]);
+  const [deptRows, setDeptRows] = useState<DeptRow[]>(emptyDeptRows());
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitNote, setSubmitNote] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -167,6 +261,55 @@ export default function PreSessionQuestionnaire() {
     setDiagnosticTier(result.diagnostic_tier);
     setRows(result.rows);
     setSubmission(result.submission ?? null);
+
+    // Saved number boxes and the submission time (a failure here leaves the boxes empty).
+    const numRes = await supabase.rpc('get_presession_numbers', { p_token: token });
+    const numData = numRes.data as {
+      numbers: Array<{ field_key: string; item_index: number; value: number }>;
+      texts?: Array<{ field_key: string; item_index?: number; value: string }>;
+      submitted_at: string | null;
+    } | null;
+    if (!numRes.error && numData) {
+      const loadedTexts: Record<string, string> = {};
+      const deptMap = new Map<number, DeptRow>();
+      const deptAt = (idx: number): DeptRow => {
+        let d = deptMap.get(idx);
+        if (!d) {
+          d = { idx, name: '', hours: '' };
+          deptMap.set(idx, d);
+        }
+        return d;
+      };
+      const resultMap = new Map<number, ResultBox>();
+      const resultAt = (idx: number): ResultBox => {
+        let r = resultMap.get(idx);
+        if (!r) {
+          r = { idx, value: '' };
+          resultMap.set(idx, r);
+        }
+        return r;
+      };
+      for (const t of numData.texts ?? []) {
+        if (t.field_key === DEPT_NAME_KEY) deptAt(t.item_index ?? 1).name = t.value;
+        else loadedTexts[t.field_key] = t.value;
+      }
+      setTexts(loadedTexts);
+      const fixed: Record<string, string> = {};
+      for (const n of numData.numbers ?? []) {
+        if (n.field_key === RESULTS_KEY) resultAt(n.item_index).value = String(n.value);
+        else if (n.field_key === DEPT_HOURS_KEY) deptAt(n.item_index).hours = String(n.value);
+        else fixed[n.field_key] = String(n.value);
+      }
+      setNumbers(fixed);
+      // The first initiative row always shows, even before anything is saved.
+      resultAt(1);
+      setResultBoxes(Array.from(resultMap.values()).sort((a, b) => a.idx - b.idx));
+      // The first two department rows always show, even before anything is saved.
+      deptAt(1);
+      deptAt(2);
+      setDeptRows(Array.from(deptMap.values()).sort((a, b) => a.idx - b.idx));
+      setSubmittedAt(numData.submitted_at ?? null);
+    }
     setLoading(false);
   }
 
@@ -183,6 +326,156 @@ export default function PreSessionQuestionnaire() {
 
   function updateLocalAnswer(rowId: string, value: string) {
     setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, answer_text: value } : r)));
+  }
+
+  // A figure saves when the client leaves its box, and only when it is a valid number.
+  const saveNumber = useCallback(async (fieldKey: string, itemIndex: number, text: string) => {
+    const n = parseNumber(text);
+    if (n === null) return;
+    const { data, error } = await supabase.rpc('save_presession_number', {
+      p_token: token,
+      p_field_key: fieldKey,
+      p_item_index: itemIndex,
+      p_value: n,
+    });
+    if (error || data !== true) return;
+    const savedKey = `${fieldKey}:${itemIndex}`;
+    setSavedId(savedKey);
+    setTimeout(() => setSavedId((cur) => (cur === savedKey ? null : cur)), 1800);
+  }, [token]);
+
+  function changeNumber(fieldKey: string, text: string) {
+    if (!/^[0-9.,]*$/.test(text)) return;
+    setNumbers((prev) => ({ ...prev, [fieldKey]: text }));
+  }
+
+  const saveText = useCallback(async (fieldKey: string, text: string) => {
+    const { data, error } = await supabase.rpc('save_presession_text', {
+      p_token: token,
+      p_field_key: fieldKey,
+      p_value: text,
+    });
+    if (error || data !== true) return;
+    const savedKey = `text:${fieldKey}`;
+    setSavedId(savedKey);
+    setTimeout(() => setSavedId((cur) => (cur === savedKey ? null : cur)), 1800);
+  }, [token]);
+
+  const saveDeptName = useCallback(async (idx: number, text: string) => {
+    const { data, error } = await supabase.rpc('save_presession_text', {
+      p_token: token,
+      p_field_key: DEPT_NAME_KEY,
+      p_value: text,
+      p_item_index: idx,
+    });
+    if (error || data !== true) return;
+    const savedKey = `${DEPT_NAME_KEY}:${idx}`;
+    setSavedId(savedKey);
+    setTimeout(() => setSavedId((cur) => (cur === savedKey ? null : cur)), 1800);
+  }, [token]);
+
+  function changeDeptName(idx: number, text: string) {
+    setDeptRows((prev) => prev.map((d) => (d.idx === idx ? { ...d, name: text } : d)));
+  }
+
+  function changeDeptHours(idx: number, text: string) {
+    if (!/^[0-9.,]*$/.test(text)) return;
+    setDeptRows((prev) => prev.map((d) => (d.idx === idx ? { ...d, hours: text } : d)));
+  }
+
+  function addDepartment() {
+    setDeptRows((prev) => {
+      if (prev.length >= MAX_DEPARTMENTS) return prev;
+      const next = Math.max(...prev.map((d) => d.idx)) + 1;
+      return [...prev, { idx: next, name: '', hours: '' }];
+    });
+  }
+
+  // Removing a row also clears that row's saved name (the database does both together).
+  async function removeDepartment(idx: number) {
+    setDeptRows((prev) => prev.filter((d) => d.idx !== idx));
+    await supabase.rpc('delete_presession_number', {
+      p_token: token,
+      p_field_key: DEPT_HOURS_KEY,
+      p_item_index: idx,
+    });
+  }
+
+  function changeResult(idx: number, text: string) {
+    if (!/^[0-9.,]*$/.test(text)) return;
+    setResultBoxes((prev) => prev.map((b) => (b.idx === idx ? { ...b, value: text } : b)));
+  }
+
+  function addInitiative() {
+    setResultBoxes((prev) => {
+      if (prev.length >= MAX_INITIATIVES) return prev;
+      const next = Math.max(...prev.map((b) => b.idx)) + 1;
+      return [...prev, { idx: next, value: '' }];
+    });
+  }
+
+  async function removeInitiative(idx: number) {
+    setResultBoxes((prev) => prev.filter((b) => b.idx !== idx));
+    await supabase.rpc('delete_presession_number', {
+      p_token: token,
+      p_field_key: RESULTS_KEY,
+      p_item_index: idx,
+    });
+  }
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setSubmitNote('');
+    // Save everything currently on the screen first, so a box the client just typed in
+    // (and has not clicked out of yet) is on file before the check runs.
+    const pending: Array<PromiseLike<unknown>> = [];
+    for (const r of rows) {
+      const dq = r.diagnostic_questions;
+      if (isNumbersOnlyQuestion(dq.framework, dq.pillar, dq.question_order)) continue;
+      pending.push(
+        supabase.rpc('save_presession_answer', { p_token: token, p_row_id: r.id, p_answer: r.answer_text ?? '' })
+      );
+    }
+    for (const k of FIXED_NUMBER_KEYS) {
+      const n = parseNumber(numbers[k] ?? '');
+      if (n !== null) {
+        pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: k, p_item_index: 1, p_value: n }));
+      }
+    }
+    for (const k of FIXED_TEXT_KEYS) {
+      if ((texts[k] ?? '').trim() !== '') {
+        pending.push(supabase.rpc('save_presession_text', { p_token: token, p_field_key: k, p_value: texts[k] }));
+      }
+    }
+    for (const b of resultBoxes) {
+      const n = parseNumber(b.value);
+      if (n !== null) {
+        pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: RESULTS_KEY, p_item_index: b.idx, p_value: n }));
+      }
+    }
+    for (const d of deptRows) {
+      if (d.name.trim() !== '') {
+        pending.push(supabase.rpc('save_presession_text', { p_token: token, p_field_key: DEPT_NAME_KEY, p_value: d.name, p_item_index: d.idx }));
+      }
+      const n = parseNumber(d.hours);
+      if (n !== null) {
+        pending.push(supabase.rpc('save_presession_number', { p_token: token, p_field_key: DEPT_HOURS_KEY, p_item_index: d.idx, p_value: n }));
+      }
+    }
+    await Promise.all(pending);
+    // The client's own time zone, read from their browser, so the report date is the day it was where they sit.
+    let browserTz: string | null = null;
+    try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { browserTz = null; }
+    const { data, error } = await supabase.rpc('submit_presession', { p_token: token, p_timezone: browserTz });
+    const result = data as { ok: boolean; reason?: string; submitted_at?: string } | null;
+    if (!error && result?.ok) {
+      setSubmittedAt(result.submitted_at ?? new Date().toISOString());
+    } else if (!error && result?.reason === 'already_submitted') {
+      await load(token);
+    } else {
+      setSubmitNote('Some answers or numbers are not saved yet. Click out of each box once, then submit again.');
+    }
+    setSubmitting(false);
   }
 
   if (loading) {
@@ -206,9 +499,28 @@ export default function PreSessionQuestionnaire() {
     );
   }
 
-  const totalCount = rows.length;
-  const answeredCount = rows.filter((r) => (r.answer_text ?? '').trim().length > 0).length;
+  const writtenRows = rows.filter(
+    (r) => !isNumbersOnlyQuestion(r.diagnostic_questions.framework, r.diagnostic_questions.pillar, r.diagnostic_questions.question_order)
+  );
+  const totalCount = writtenRows.length;
+  const answeredCount = writtenRows.filter((r) => (r.answer_text ?? '').trim().length > 0).length;
   const isComplete = totalCount > 0 && answeredCount === totalCount;
+
+  const hasClear = rows.some((r) => r.diagnostic_questions.framework === 'CLEAR');
+  const fixedFilled = FIXED_NUMBER_KEYS.filter((k) => parseNumber(numbers[k] ?? '') !== null).length;
+  const resultsFilled = resultBoxes.filter((b) => parseNumber(b.value) !== null).length;
+  const textsFilled = FIXED_TEXT_KEYS.filter((k) => (texts[k] ?? '').trim() !== '').length;
+  // Each department row counts twice: its name and its hours.
+  const deptFilled = deptRows.reduce(
+    (sum, d) => sum + (d.name.trim() !== '' ? 1 : 0) + (parseNumber(d.hours) !== null ? 1 : 0),
+    0
+  );
+  const numbersTotal = hasClear ? FIXED_NUMBER_KEYS.length + FIXED_TEXT_KEYS.length + resultBoxes.length + deptRows.length * 2 : 0;
+  const numbersFilled = hasClear ? fixedFilled + textsFilled + resultsFilled + deptFilled : 0;
+  const numbersComplete = !hasClear || numbersFilled === numbersTotal;
+  const canSubmit = isComplete && numbersComplete && !submitting;
+  // Once submitted the questionnaire is read-only; the database refuses further saves too.
+  const locked = submittedAt !== null;
 
   const frameworksPresent = FRAMEWORK_ORDER.filter((fw) => rows.some((r) => r.diagnostic_questions.framework === fw));
 
@@ -230,6 +542,7 @@ export default function PreSessionQuestionnaire() {
           </div>
         )}
 
+        <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         {frameworksPresent.map((framework) => {
           const pillars = PILLAR_ORDER[framework].filter((p) =>
             rows.some((r) => r.diagnostic_questions.framework === framework && r.diagnostic_questions.pillar === p)
@@ -281,24 +594,213 @@ export default function PreSessionQuestionnaire() {
                       <div style={{ fontSize: 12, letterSpacing: 1, color: GOLD, marginBottom: 10, fontFamily: 'Inter, sans-serif' }}>
                         {framework === 'CLEAR' ? 'Deeper Dive: Complete these tasks before your session:' : ''}
                       </div>
-                      {pillarRows.map((row, idx) => (
-                        <div key={row.id} style={{ marginBottom: 16 }}>
-                          <label style={{ display: 'block', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 15, marginBottom: 6 }}>
-                            {framework === 'CLEAR' ? `${idx + 1}. ` : ''}
-                            {row.diagnostic_questions.question_text}
-                          </label>
-                          <textarea
-                            defaultValue={row.answer_text ?? ''}
-                            onChange={(e) => updateLocalAnswer(row.id, e.target.value)}
-                            onBlur={(e) => saveAnswer(row.id, e.target.value)}
-                            rows={3}
-                            style={textareaStyle}
-                          />
-                          {savedId === row.id && (
-                            <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
-                          )}
-                        </div>
-                      ))}
+                      {pillarRows.map((row, idx) => {
+                        const numberFields =
+                          framework === 'CLEAR'
+                            ? NUMBER_FIELDS[`${pillar}:${row.diagnostic_questions.question_order}`] ?? []
+                            : [];
+                        const isResultsValueQuestion =
+                          framework === 'CLEAR' && pillar === 'Results' && row.diagnostic_questions.question_order === 2;
+                        const isAlignmentDeptQuestion =
+                          framework === 'CLEAR' && pillar === 'Alignment' && row.diagnostic_questions.question_order === 2;
+                        const numbersFirstLabel =
+                          framework === 'CLEAR' ? NUMBERS_FIRST[`${pillar}:${row.diagnostic_questions.question_order}`] : undefined;
+                        const textFields =
+                          framework === 'CLEAR' ? TEXT_FIELDS[`${pillar}:${row.diagnostic_questions.question_order}`] ?? [] : [];
+                        const numberBlock =
+                          numberFields.length > 0 || textFields.length > 0 ? (
+                            <div style={numberRowStyle}>
+                              {textFields.map((f) => (
+                                <div key={f.key} style={{ flex: '0 0 auto', width: 280, maxWidth: '100%' }}>
+                                  <label htmlFor={`txt-${f.key}`} style={numberLabelStyle}>{f.label}</label>
+                                  <input
+                                    id={`txt-${f.key}`}
+                                    type="text"
+                                    autoComplete="off"
+                                    maxLength={200}
+                                    value={texts[f.key] ?? ''}
+                                    onChange={(e) => setTexts((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                                    onBlur={(e) => saveText(f.key, e.target.value)}
+                                    style={numberInputStyle}
+                                  />
+                                  {savedId === `text:${f.key}` && (
+                                    <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                  )}
+                                </div>
+                              ))}
+                              {numberFields.map((f) => (
+                                <div key={f.key} style={numberCellStyle(f.size)}>
+                                  {f.label && <label htmlFor={`num-${f.key}`} style={numberLabelStyle}>{f.label}</label>}
+                                  {/* An unlabeled box beside a labeled one gets an invisible label so the boxes sit level. */}
+                                  {!f.label && numberFields.some((x) => x.label) && (
+                                    <div aria-hidden="true" style={{ ...numberLabelStyle, visibility: 'hidden' }}>&nbsp;</div>
+                                  )}
+                                  <input
+                                    id={`num-${f.key}`}
+                                    aria-label={f.label ? undefined : f.ariaLabel}
+                                    type="text"
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    value={numbers[f.key] ?? ''}
+                                    onChange={(e) => changeNumber(f.key, e.target.value)}
+                                    onBlur={(e) => saveNumber(f.key, 1, e.target.value)}
+                                    style={numberInputStyle}
+                                  />
+                                  {savedId === `${f.key}:1` && (
+                                    <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null;
+
+                        return (
+                          <div key={row.id} style={{ marginBottom: 16 }}>
+                            <label style={{ display: 'block', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 15, marginBottom: 6 }}>
+                              {framework === 'CLEAR' ? `${idx + 1}. ` : ''}
+                              {row.diagnostic_questions.question_text}
+                            </label>
+                            {numbersFirstLabel && numberBlock}
+                            {!isNumbersOnlyQuestion(framework, pillar, row.diagnostic_questions.question_order) && (
+                              <>
+                                {numbersFirstLabel && (
+                                  <label
+                                    htmlFor={`text-${row.id}`}
+                                    style={{ display: 'block', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, margin: '14px 0 4px 0' }}
+                                  >
+                                    {numbersFirstLabel}
+                                  </label>
+                                )}
+                                <textarea
+                                  id={`text-${row.id}`}
+                                  defaultValue={row.answer_text ?? ''}
+                                  onChange={(e) => updateLocalAnswer(row.id, e.target.value)}
+                                  onBlur={(e) => saveAnswer(row.id, e.target.value)}
+                                  rows={numbersFirstLabel ? 2 : 3}
+                                  style={textareaStyle}
+                                />
+                                {savedId === row.id && (
+                                  <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                )}
+                              </>
+                            )}
+
+                            {!numbersFirstLabel && numberBlock}
+
+                            {isAlignmentDeptQuestion && (
+                              <div style={{ marginTop: 10 }}>
+                                {deptRows.map((d, pos) => (
+                                  <div key={d.idx} style={{ ...numberRowStyle, marginTop: pos === 0 ? 0 : 12 }}>
+                                    <div style={{ flex: '0 0 auto', width: 280, maxWidth: '100%' }}>
+                                      <label htmlFor={`dept-name-${d.idx}`} style={numberLabelStyle}>
+                                        Department {pos + 1}
+                                      </label>
+                                      <input
+                                        id={`dept-name-${d.idx}`}
+                                        type="text"
+                                        autoComplete="off"
+                                        maxLength={200}
+                                        value={d.name}
+                                        onChange={(e) => changeDeptName(d.idx, e.target.value)}
+                                        onBlur={(e) => saveDeptName(d.idx, e.target.value)}
+                                        style={numberInputStyle}
+                                      />
+                                      {savedId === `${DEPT_NAME_KEY}:${d.idx}` && (
+                                        <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                      )}
+                                    </div>
+                                    <div style={numberCellStyle('count')}>
+                                      <label htmlFor={`dept-hours-${d.idx}`} style={numberLabelStyle}>
+                                        Hours this quarter
+                                      </label>
+                                      <input
+                                        id={`dept-hours-${d.idx}`}
+                                        type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        value={d.hours}
+                                        onChange={(e) => changeDeptHours(d.idx, e.target.value)}
+                                        onBlur={(e) => saveNumber(DEPT_HOURS_KEY, d.idx, e.target.value)}
+                                        style={numberInputStyle}
+                                      />
+                                      {savedId === `${DEPT_HOURS_KEY}:${d.idx}` && (
+                                        <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                      )}
+                                    </div>
+                                    {!locked && pos > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeDepartment(d.idx)}
+                                        aria-label={`Remove department ${pos + 1}`}
+                                        style={{ ...removeButtonStyle, alignSelf: 'flex-start', marginTop: 20, height: 42 }}
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                                {!locked && (
+                                <button
+                                  type="button"
+                                  onClick={addDepartment}
+                                  disabled={deptRows.length >= MAX_DEPARTMENTS}
+                                  style={addButtonStyle}
+                                >
+                                  Add another department
+                                </button>
+                                )}
+                              </div>
+                            )}
+
+                            {isResultsValueQuestion && (
+                              <div style={{ marginTop: 10 }}>
+                                {resultBoxes.map((b, pos) => (
+                                  <div key={b.idx} style={{ ...numberRowStyle, marginTop: pos === 0 ? 0 : 12 }}>
+                                    <div style={numberCellStyle('money')}>
+                                      <label htmlFor={`num-results-${b.idx}`} style={numberLabelStyle}>
+                                        Initiative {pos + 1} value ($)
+                                      </label>
+                                      <input
+                                        id={`num-results-${b.idx}`}
+                                        type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        value={b.value}
+                                        onChange={(e) => changeResult(b.idx, e.target.value)}
+                                        onBlur={(e) => saveNumber(RESULTS_KEY, b.idx, e.target.value)}
+                                        style={numberInputStyle}
+                                      />
+                                      {savedId === `${RESULTS_KEY}:${b.idx}` && (
+                                        <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
+                                      )}
+                                    </div>
+                                    {!locked && pos > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeInitiative(b.idx)}
+                                        aria-label={`Remove initiative ${pos + 1}`}
+                                        style={{ ...removeButtonStyle, alignSelf: 'flex-start', marginTop: 20, height: 42 }}
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                                {!locked && (
+                                <button
+                                  type="button"
+                                  onClick={addInitiative}
+                                  disabled={resultBoxes.length >= MAX_INITIATIVES}
+                                  style={addButtonStyle}
+                                >
+                                  Add another initiative
+                                </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -306,6 +808,7 @@ export default function PreSessionQuestionnaire() {
             </div>
           );
         })}
+        </fieldset>
 
         {/* Closing */}
         {diagnosticTier && (
@@ -323,10 +826,37 @@ export default function PreSessionQuestionnaire() {
           </div>
         )}
 
-        {isComplete && (
-          <div style={{ textAlign: 'center', padding: 24, border: `1px solid ${GOLD}`, borderRadius: 4 }}>
+        {/* Submit */}
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          {!locked && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              style={{ ...submitButtonStyle, opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'not-allowed' }}
+            >
+              Submit
+            </button>
+          )}
+          {!locked && !canSubmit && (
+            <div style={{ color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>
+              {answeredCount + numbersFilled} of {totalCount + numbersTotal} answered
+            </div>
+          )}
+          {submittedAt && (
+            <div style={{ color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>
+              Submitted {new Date(submittedAt).toLocaleString()}
+            </div>
+          )}
+          {submitNote && (
+            <div style={{ color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 13, marginTop: 10 }}>{submitNote}</div>
+          )}
+        </div>
+
+        {submittedAt && (
+          <div style={{ textAlign: 'center', padding: 24, border: `1px solid ${GOLD}`, borderRadius: 4, marginBottom: 24 }}>
             <p style={{ margin: 0, color: GOLD, fontFamily: 'Inter, sans-serif', fontSize: 15 }}>
-              Complete — every question has an answer on file. See you on the call.
+              Completed; all responses are on file. We look forward to providing value during the call.
             </p>
           </div>
         )}
@@ -368,4 +898,73 @@ const textareaStyle: React.CSSProperties = {
   fontFamily: 'Inter, sans-serif',
   fontSize: 14,
   resize: 'vertical',
+};
+
+const numberRowStyle: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 14,
+  marginTop: 10,
+};
+
+// Boxes are sized to the answer they hold: short for counts, wider for dollar amounts.
+const numberCellStyle = (size: 'count' | 'money' | 'wide'): React.CSSProperties => ({
+  flex: '0 0 auto',
+  width: size === 'wide' ? 220 : size === 'money' ? 190 : 130,
+  maxWidth: '100%',
+});
+
+const numberLabelStyle: React.CSSProperties = {
+  display: 'block',
+  color: BODY_TEXT_ON_NAVY,
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 13,
+  marginBottom: 4,
+};
+
+const numberInputStyle: React.CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  backgroundColor: WARM_WHITE,
+  color: '#2C2C2C',
+  border: '1px solid rgba(212,175,55,0.5)',
+  borderRadius: 4,
+  padding: 10,
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 14,
+};
+
+const addButtonStyle: React.CSSProperties = {
+  marginTop: 12,
+  backgroundColor: 'transparent',
+  color: GOLD,
+  border: `1px solid ${GOLD}`,
+  borderRadius: 4,
+  padding: '8px 14px',
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 13,
+  cursor: 'pointer',
+};
+
+const removeButtonStyle: React.CSSProperties = {
+  backgroundColor: 'transparent',
+  color: BODY_TEXT_ON_NAVY,
+  border: '1px solid rgba(232,232,232,0.5)',
+  borderRadius: 4,
+  padding: '8px 10px',
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 12,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+const submitButtonStyle: React.CSSProperties = {
+  backgroundColor: GOLD,
+  color: NAVY,
+  border: 'none',
+  borderRadius: 4,
+  padding: '14px 40px',
+  fontFamily: 'Inter, sans-serif',
+  fontSize: 16,
+  fontWeight: 700,
 };

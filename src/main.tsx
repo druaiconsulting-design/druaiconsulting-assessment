@@ -41,12 +41,25 @@ document.addEventListener(
   { passive: false }
 );
 
-// Register service worker for PWA capability
+// Register service worker for PWA capability.
+// The pre-session form never uses a saved copy: on that page any service worker and cache
+// left in the browser is removed, so the client always gets the newest form.
+const _isPreSessionPage = /[?&](sd|ed)-pre-session=/.test(window.location.search);
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
+  if (_isPreSessionPage) {
     navigator.serviceWorker
-      .register("/sw.js")
-      .then((reg) => console.log("[DRU CLEAR\u2122] Service worker registered:", reg.scope))
-      .catch((err) => console.warn("[DRU CLEAR\u2122] Service worker registration failed:", err));
-  });
+      .getRegistrations()
+      .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+      .catch(() => undefined);
+    if ("caches" in window) {
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).catch(() => undefined);
+    }
+  } else {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then((reg) => console.log("[DRU CLEAR\u2122] Service worker registered:", reg.scope))
+        .catch((err) => console.warn("[DRU CLEAR\u2122] Service worker registration failed:", err));
+    });
+  }
 }

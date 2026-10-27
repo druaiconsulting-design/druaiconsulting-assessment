@@ -9,6 +9,8 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // The service worker is registered in src/main.tsx so the pre-session form can skip it.
+      injectRegister: false,
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'DRU CLEAR™ AI Readiness Assessment',
