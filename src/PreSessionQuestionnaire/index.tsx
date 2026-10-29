@@ -178,6 +178,13 @@ function parseNumber(text: string): number | null {
 
 // Clarity Q2 (Dollars, Weeks), Leadership Q2 (three counts), Execution Q2 (Dollars), Alignment Q2 (department rows)
 // and Results Q2 (initiative rows) are answered by their boxes alone, so they have no written-answer box.
+// The decision-style question is answered by ticking one or more of the four styles. The ticked styles are saved as
+// one line of text, in D, I, S, C order, joined by "; ", so the report writer reads it like any other answer.
+const STYLE_CHOICES = ['D: Results and speed', 'I: Recognition and energy', 'S: Trust and steadiness', 'C: Data and proof'];
+function isStyleQuestion(framework: string, pillar: string, questionOrder: number): boolean {
+  return framework === 'AI_SALES_MASTERY' && pillar === "Speak Your Client's Decision Language" && questionOrder === 1;
+}
+
 function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
   return (
     framework === 'CLEAR' &&
@@ -671,6 +678,32 @@ export default function PreSessionQuestionnaire() {
                                     {numbersFirstLabel}
                                   </label>
                                 )}
+                                {isStyleQuestion(framework, pillar, row.diagnostic_questions.question_order) ? (
+                                  <div role="group" aria-label="Behavioral styles" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                                    {STYLE_CHOICES.map((choice) => {
+                                      const picked = (row.answer_text ?? '').split('; ').includes(choice);
+                                      return (
+                                        <label
+                                          key={choice}
+                                          style={{ display: 'flex', alignItems: 'center', gap: 10, color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 15, cursor: 'pointer' }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={picked}
+                                            onChange={() => {
+                                              const have = (row.answer_text ?? '').split('; ').filter(Boolean);
+                                              const next = STYLE_CHOICES.filter((c) => (c === choice ? !picked : have.includes(c))).join('; ');
+                                              updateLocalAnswer(row.id, next);
+                                              saveAnswer(row.id, next);
+                                            }}
+                                            style={{ width: 18, height: 18, accentColor: GOLD }}
+                                          />
+                                          {choice}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
                                 <textarea
                                   id={`text-${row.id}`}
                                   defaultValue={row.answer_text ?? ''}
@@ -679,6 +712,7 @@ export default function PreSessionQuestionnaire() {
                                   rows={numbersFirstLabel ? 2 : 3}
                                   style={textareaStyle}
                                 />
+                                )}
                                 {savedId === row.id && (
                                   <div style={{ color: GOLD, fontSize: 12, marginTop: 4, fontFamily: 'Inter, sans-serif' }}>Saved</div>
                                 )}
