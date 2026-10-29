@@ -190,6 +190,12 @@ function tickChoicesFor(framework: string, pillar: string, questionOrder: number
   return null;
 }
 
+// The "What this means" line on the Leadership and Alignment pillars reads without the long dash: a comma takes its place.
+// The same messages on the free assessment results page are left as they are.
+function noLongDash(pillar: string, text: string): string {
+  return pillar === 'Leadership' || pillar === 'Alignment' ? text.replace(/\s+—\s+/g, ', ') : text;
+}
+
 function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
   return (
     framework === 'CLEAR' &&
@@ -594,9 +600,10 @@ export default function PreSessionQuestionnaire() {
                         <p style={{ margin: '8px 0 0 0', color: BODY_TEXT_ON_NAVY, fontFamily: 'Inter, sans-serif', fontSize: 14 }}>
                           What this means:{' '}
                           <em>
-                            {(submission[clearMeta.scoreField] as number) < 12
-                              ? GAP_MESSAGES[pillar]
-                              : STRENGTH_MESSAGES[pillar]}
+                            {noLongDash(
+                              pillar,
+                              (submission[clearMeta.scoreField] as number) < 12 ? GAP_MESSAGES[pillar] : STRENGTH_MESSAGES[pillar]
+                            )}
                           </em>
                         </p>
                       </div>
