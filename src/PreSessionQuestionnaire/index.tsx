@@ -680,6 +680,7 @@ export default function PreSessionQuestionnaire() {
                                 )}
                                 {isStyleQuestion(framework, pillar, row.diagnostic_questions.question_order) ? (
                                   <div role="group" aria-label="Behavioral styles" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                                    <div style={{ fontSize: 12, letterSpacing: 1, color: GOLD, fontFamily: 'Inter, sans-serif' }}>Select all that apply</div>
                                     {STYLE_CHOICES.map((choice) => {
                                       const picked = (row.answer_text ?? '').split('; ').includes(choice);
                                       return (
