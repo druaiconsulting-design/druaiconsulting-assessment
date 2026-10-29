@@ -177,11 +177,17 @@ function parseNumber(text: string): number | null {
 
 // Clarity Q2 (Dollars, Weeks), Leadership Q2 (three counts), Execution Q2 (Dollars), Alignment Q2 (department rows)
 // and Results Q2 (initiative rows) are answered by their boxes alone, so they have no written-answer box.
-// The decision-style question is answered by ticking one or more of the four styles. The ticked styles are saved as
-// one line of text, in D, I, S, C order, joined by "; ", so the report writer reads it like any other answer.
+// Three questions are answered by ticking one or more boxes: the decision styles, the Leadership fluency stages and the
+// Execution deployment stages. The ticked boxes are saved as one line of text, in the order listed here, joined by "; ",
+// so the report writer reads it like any other answer.
 const STYLE_CHOICES = ['D: Results and speed', 'I: Recognition and energy', 'S: Trust and steadiness', 'C: Data and proof'];
-function isStyleQuestion(framework: string, pillar: string, questionOrder: number): boolean {
-  return framework === 'AI_SALES_MASTERY' && pillar === "Speak Your Client's Decision Language" && questionOrder === 1;
+const LEADERSHIP_STAGE_CHOICES = ['Awareness', 'Collaboration', 'Community culture'];
+const EXECUTION_STAGE_CHOICES = ['Learn IT', 'Live IT', 'Lead IT'];
+function tickChoicesFor(framework: string, pillar: string, questionOrder: number): string[] | null {
+  if (framework === 'AI_SALES_MASTERY' && pillar === "Speak Your Client's Decision Language" && questionOrder === 1) return STYLE_CHOICES;
+  if (framework === 'CLEAR' && pillar === 'Leadership' && questionOrder === 3) return LEADERSHIP_STAGE_CHOICES;
+  if (framework === 'CLEAR' && pillar === 'Execution' && questionOrder === 3) return EXECUTION_STAGE_CHOICES;
+  return null;
 }
 
 function isNumbersOnlyQuestion(framework: string, pillar: string, questionOrder: number): boolean {
@@ -677,10 +683,10 @@ export default function PreSessionQuestionnaire() {
                                     {numbersFirstLabel}
                                   </label>
                                 )}
-                                {isStyleQuestion(framework, pillar, row.diagnostic_questions.question_order) ? (
-                                  <div role="group" aria-label="Behavioral styles" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                                {tickChoicesFor(framework, pillar, row.diagnostic_questions.question_order) ? (
+                                  <div role="group" aria-label="Choices" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
                                     <div style={{ fontSize: 12, letterSpacing: 1, color: GOLD, fontFamily: 'Inter, sans-serif' }}>Select all that apply</div>
-                                    {STYLE_CHOICES.map((choice) => {
+                                    {(tickChoicesFor(framework, pillar, row.diagnostic_questions.question_order) ?? []).map((choice) => {
                                       const picked = (row.answer_text ?? '').split('; ').includes(choice);
                                       return (
                                         <label
@@ -692,7 +698,7 @@ export default function PreSessionQuestionnaire() {
                                             checked={picked}
                                             onChange={() => {
                                               const have = (row.answer_text ?? '').split('; ').filter(Boolean);
-                                              const next = STYLE_CHOICES.filter((c) => (c === choice ? !picked : have.includes(c))).join('; ');
+                                              const next = (tickChoicesFor(framework, pillar, row.diagnostic_questions.question_order) ?? []).filter((c) => (c === choice ? !picked : have.includes(c))).join('; ');
                                               updateLocalAnswer(row.id, next);
                                               saveAnswer(row.id, next);
                                             }}
